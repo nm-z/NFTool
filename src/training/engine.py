@@ -10,7 +10,7 @@ import optuna
 from src.models.architectures import model_factory
 from src.data.processing import preprocess_for_cnn
 
-def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, num_epochs=200):
+def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, num_epochs=200, check_stop=None):
     if config is None:
         return None, float("inf"), {'train': [], 'val': [], 'r2': [], 'mae': []}
     
@@ -25,6 +25,9 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
     counter = 0
 
     for epoch in range(num_epochs):
+        if check_stop and check_stop():
+            break
+
         model.train()
         optimizer.zero_grad()
         output = model(X_train)
@@ -58,7 +61,7 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
         model.load_state_dict(best_model_state)
     return model, best_val_loss, history
 
-def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, num_epochs=200):
+def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, num_epochs=200, check_stop=None):
     X_train = preprocess_for_cnn(X_train_np).to(device)
     X_val = preprocess_for_cnn(X_val_np).to(device)
     y_train = torch.tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
@@ -75,6 +78,9 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
     counter = 0
 
     for epoch in range(num_epochs):
+        if check_stop and check_stop():
+            break
+
         model.train()
         optimizer.zero_grad()
         output = model(X_train)

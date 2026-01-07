@@ -6,6 +6,7 @@ import os
 import torch
 import pandas as pd
 import numpy as np
+import optuna
 from datetime import datetime
 import asyncio
 import json
@@ -30,10 +31,17 @@ app.add_middleware(
 class TrainingState:
     def __init__(self):
         self.is_running = False
+        self.should_stop = False
         self.progress = 0
+        self.current_trial = 0
+        self.total_trials = 0
         self.logs = []
         self.result = None
         self.clients: List[WebSocket] = []
+        self.loop = None
+
+    def set_loop(self, loop):
+        self.loop = loop
 
     async def broadcast(self, message: Dict[str, Any]):
         if not self.clients:
@@ -51,16 +59,20 @@ class TrainingState:
             if client in self.clients:
                 self.clients.remove(client)
 
+    def broadcast_sync(self, message: Dict[str, Any]):
+        if self.loop:
+            asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
+
     def add_log(self, msg: str, type: str = "default"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = {"time": timestamp, "msg": msg, "type": type}
         self.logs.append(log_entry)
-        # We'll broadcast this separately in the async loop
         return log_entry
 
 state = TrainingState()
 
 class TrainingConfig(BaseModel):
+# ... (rest of config)
     model_choice: str
     seed: int
     patience: int
@@ -91,21 +103,37 @@ async def log_and_broadcast(msg: str, type: str = "default"):
     await state.broadcast({"type": "log", "data": entry})
     print(f"[{entry['time']}] {msg}")
 
-async def run_training_task(config: TrainingConfig):
+def log_and_broadcast_sync(msg: str, type: str = "default"):
+    entry = state.add_log(msg, type)
+    state.broadcast_sync({"type": "log", "data": entry})
+    print(f"[{entry['time']}] {msg}")
+
+def run_training_task(config: TrainingConfig):
     state.is_running = True
+    state.should_stop = False
     state.progress = 0
+    state.current_trial = 0
+    state.total_trials = config.optuna_trials
     state.logs = []
     state.result = None
     
-    await state.broadcast({"type": "status", "data": {"is_running": True, "progress": 0}})
+    state.broadcast_sync({
+        "type": "status", 
+        "data": {
+            "is_running": True, 
+            "progress": 0,
+            "current_trial": 0,
+            "total_trials": config.optuna_trials
+        }
+    })
 
     try:
-        await log_and_broadcast("Starting training engine...", "info")
+        log_and_broadcast_sync("Starting training engine...", "info")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        await log_and_broadcast(f"Using device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}", "success")
+        log_and_broadcast_sync(f"Using device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}", "success")
 
         # Load Data
-        await log_and_broadcast(f"Loading datasets from {config.predictor_path}...", "default")
+        log_and_broadcast_sync(f"Loading datasets from {config.predictor_path}...", "default")
         df_X = pd.read_csv(config.predictor_path, header=None)
         df_y = pd.read_csv(config.target_path, header=None).dropna()
         min_len = min(len(df_X), len(df_y))
@@ -113,7 +141,7 @@ async def run_training_task(config: TrainingConfig):
         
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X_raw)
-        await log_and_broadcast(f"Data loaded: {X_raw.shape[0]} samples, {X_raw.shape[1]} features", "success")
+        log_and_broadcast_sync(f"Data loaded: {X_raw.shape[0]} samples, {X_raw.shape[1]} features", "success")
 
         # Split Data
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_raw, test_size=config.test_ratio, random_state=config.seed)
@@ -122,6 +150,25 @@ async def run_training_task(config: TrainingConfig):
 
         # Optuna Objective
         def objective(trial):
+            state.current_trial = trial.number + 1
+            state.progress = int((trial.number) / config.optuna_trials * 100)
+            state.broadcast_sync({
+                "type": "status", 
+                "data": {
+                    "is_running": True, 
+                    "progress": state.progress,
+                    "current_trial": state.current_trial,
+                    "total_trials": state.total_trials
+                }
+            })
+
+            def check_stop():
+                return state.should_stop
+
+            if state.should_stop:
+                trial.study.stop()
+                raise optuna.exceptions.TrialPruned("Training aborted by user.")
+
             optimizer = trial.suggest_categorical("optimizer", config.optimizers)
             lr = trial.suggest_float("lr", config.lr_min, config.lr_max, log=True)
             dropout = trial.suggest_float("dropout", config.drop_min, config.drop_max)
@@ -135,7 +182,7 @@ async def run_training_task(config: TrainingConfig):
                     torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device),
                     torch.tensor(X_val, dtype=torch.float32).to(device),
                     torch.tensor(y_val, dtype=torch.float32).unsqueeze(1).to(device),
-                    X_train.shape[1], cfg, device, config.patience
+                    X_train.shape[1], cfg, device, config.patience, check_stop=check_stop
                 )
             else: # CNN
                 n_conv = trial.suggest_int("num_conv_blocks", config.conv_blocks_min, config.conv_blocks_max)
@@ -143,40 +190,65 @@ async def run_training_task(config: TrainingConfig):
                 h_dim = trial.suggest_int("hidden_dim", int(config.h_dim_min), int(config.h_dim_max))
                 conv_layers = [{'out_channels': base_filters * (2**i), 'kernel': config.kernel_size, 'pool': 2} for i in range(n_conv)]
                 cfg = {'conv_layers': conv_layers, 'hidden_dim': h_dim, 'dropout': dropout, 'lr': lr, 'optimizer': optimizer}
-                _, loss, history = train_cnn_model(X_train, y_train, X_val, y_val, cfg, device, config.patience)
+                _, loss, history = train_cnn_model(X_train, y_train, X_val, y_val, cfg, device, config.patience, check_stop=check_stop)
             
+            if state.should_stop:
+                trial.study.stop()
+                raise optuna.exceptions.TrialPruned("Training aborted by user.")
+
             if history['r2']:
                 r2 = history['r2'][-1]
                 trial.set_user_attr("r2", r2)
                 trial.set_user_attr("mae", history['mae'][-1])
-                # Note: We can't await inside the objective function since optuna isn't async aware
-                # but we can print and the state will be updated
-                print(f"Trial #{trial.number} complete. R²: {r2:.4f}")
+                log_and_broadcast_sync(f"Trial #{trial.number} complete. R²: {r2:.4f}", "optuna")
             
             state.progress = int((trial.number + 1) / config.optuna_trials * 100)
+            state.broadcast_sync({
+                "type": "status", 
+                "data": {
+                    "is_running": True, 
+                    "progress": state.progress,
+                    "current_trial": state.current_trial,
+                    "total_trials": state.total_trials
+                }
+            })
             return loss
 
-        await log_and_broadcast(f"Running {config.optuna_trials} Optuna trials...", "info")
-        # Optimization is blocking, so progress updates happen via the objective function
-        # For a truly async experience, we'd need to run this in a thread and use a queue for logs
+        log_and_broadcast_sync(f"Running {config.optuna_trials} Optuna trials...", "info")
         study = run_optimization(f"NFTool_{config.model_choice}", config.optuna_trials, None, objective)
         
-        state.result = {
-            "best_r2": study.best_trial.user_attrs.get("r2"),
-            "best_params": study.best_params
-        }
-        await log_and_broadcast(f"Optimization complete! Best R²: {study.best_trial.user_attrs.get('r2'):.4f}", "success")
+        # Filter out pruned trials when finding best trial if aborted
+        try:
+            best_trial = study.best_trial
+            state.result = {
+                "best_r2": best_trial.user_attrs.get("r2"),
+                "best_params": study.best_params
+            }
+            log_and_broadcast_sync(f"Optimization finished. Best R²: {best_trial.user_attrs.get('r2', 0):.4f}", "success")
+        except ValueError:
+            log_and_broadcast_sync("Optimization ended with no completed trials.", "warn")
+            state.result = None
 
     except Exception as e:
-        await log_and_broadcast(f"Error: {str(e)}", "warn")
+        log_and_broadcast_sync(f"Error: {str(e)}", "warn")
     finally:
         state.is_running = False
         state.progress = 100
-        await state.broadcast({"type": "status", "data": {"is_running": False, "progress": 100, "result": state.result}})
+        state.broadcast_sync({
+            "type": "status", 
+            "data": {
+                "is_running": False, 
+                "progress": 100, 
+                "current_trial": state.current_trial,
+                "total_trials": state.total_trials,
+                "result": state.result
+            }
+        })
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    state.set_loop(asyncio.get_event_loop())
     state.clients.append(websocket)
     try:
         # Send initial state
@@ -185,6 +257,8 @@ async def websocket_endpoint(websocket: WebSocket):
             "data": {
                 "is_running": state.is_running,
                 "progress": state.progress,
+                "current_trial": state.current_trial,
+                "total_trials": state.total_trials,
                 "logs": state.logs,
                 "result": state.result
             }
@@ -205,6 +279,14 @@ async def start_training(config: TrainingConfig, background_tasks: BackgroundTas
         raise HTTPException(status_code=400, detail="Training already in progress")
     background_tasks.add_task(run_training_task, config)
     return {"message": "Training started"}
+
+@app.post("/abort")
+async def abort_training():
+    if not state.is_running:
+        return {"message": "No training in progress"}
+    state.should_stop = True
+    await log_and_broadcast("ABORT SIGNAL SENT: Stopping training cores immediately...", "warn")
+    return {"message": "Abort requested"}
 
 if __name__ == "__main__":
     import uvicorn

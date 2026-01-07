@@ -50,10 +50,13 @@ export default function Dashboard() {
   const { 
     isRunning, 
     progress, 
+    currentTrial,
+    totalTrials,
     logs, 
     result, 
     setIsRunning, 
     setProgress, 
+    setTrialInfo,
     addLog, 
     setResult, 
     clearLogs 
@@ -88,10 +91,12 @@ export default function Dashboard() {
         if (msg.type === "init") {
           setIsRunning(msg.data.is_running);
           setProgress(msg.data.progress);
+          setTrialInfo(msg.data.current_trial, msg.data.total_trials);
           setResult(msg.data.result);
         } else if (msg.type === "status") {
           setIsRunning(msg.data.is_running);
           setProgress(msg.data.progress);
+          setTrialInfo(msg.data.current_trial, msg.data.total_trials);
           if (msg.data.result) setResult(msg.data.result);
         } else if (msg.type === "log") {
           addLog(msg.data);
@@ -142,6 +147,10 @@ export default function Dashboard() {
     });
   };
 
+  const handleAbortTraining = async () => {
+    await fetch("http://localhost:8001/abort", { method: "POST" });
+  };
+
   return (
     <div className="flex h-screen bg-[#09090b] text-[#a1a1aa] selection:bg-[#3b82f6]/20 font-sans">
       
@@ -185,7 +194,7 @@ export default function Dashboard() {
                 {isRunning ? "Optimizing..." : "Start Run"}
               </button>
               <Separator.Root orientation="vertical" className="mx-1 h-4 bg-[#27272a]" />
-              <IconButton icon={StopCircle} disabled={!isRunning} tooltip="Abort Run" color="hover:text-red-500" />
+              <IconButton icon={StopCircle} disabled={!isRunning} onClick={handleAbortTraining} tooltip="Abort Run" color="hover:text-red-500" />
             </div>
             <IconButton icon={Upload} tooltip="Import Dataset" />
             <IconButton icon={Download} tooltip="Export Report" />
@@ -229,7 +238,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                        <span className="text-[#52525b]">Trials</span> <span className="text-right text-[#fafafa] font-mono">{logs.filter(l => l.type === 'optuna').length} / {trials}</span>
+                        <span className="text-[#52525b]">Trials</span> <span className="text-right text-[#fafafa] font-mono">{currentTrial} / {totalTrials}</span>
                         <span className="text-[#52525b]">Best R²</span> <span className="text-right text-[#3b82f6] font-mono">{result?.best_r2?.toFixed(4) || "0.0000"}</span>
                       </div>
                     </div>
@@ -406,7 +415,7 @@ export default function Dashboard() {
                 <Command.Empty className="p-4 text-[12px] text-[#52525b]">No results found.</Command.Empty>
                 <Command.Group heading="Training Engine">
                   <CommandItem icon={Play} label="Execute Active Architecture" onSelect={handleStartTraining} />
-                  <CommandItem icon={StopCircle} label="Terminate Running Core" onSelect={() => {}} />
+                  <CommandItem icon={StopCircle} label="Terminate Running Core" onSelect={handleAbortTraining} />
                 </Command.Group>
                 <Command.Group heading="Workspace">
                   <CommandItem icon={LayoutDashboard} label="Go to Dashboard" onSelect={() => setActiveWorkspace("Dashboard")} />
@@ -450,9 +459,9 @@ function StatusChip({ icon: Icon, label, active }: any) {
   );
 }
 
-function IconButton({ icon: Icon, tooltip, disabled, color, size = 14 }: any) {
+function IconButton({ icon: Icon, tooltip, disabled, color, size = 14, onClick }: any) {
   return (
-    <button disabled={disabled} className={`p-1.5 rounded hover:bg-[#18181b] transition-colors disabled:opacity-20 relative group ${color || 'text-[#a1a1aa]'}`}>
+    <button onClick={onClick} disabled={disabled} className={`p-1.5 rounded hover:bg-[#18181b] transition-colors disabled:opacity-20 relative group ${color || 'text-[#a1a1aa]'}`}>
       <Icon size={size} />
       <div className="absolute top-[32px] left-1/2 -translate-x-1/2 bg-[#18181b] text-[#fafafa] text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-[#27272a] shadow-xl z-50">
         {tooltip}
