@@ -10,7 +10,7 @@ import optuna
 from src.models.architectures import model_factory
 from src.data.processing import preprocess_for_cnn
 
-def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, num_epochs=200, check_stop=None):
+def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, num_epochs=200, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
     if config is None:
         return None, float("inf"), {'train': [], 'val': [], 'r2': [], 'mae': []}
     
@@ -35,6 +35,9 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
         loss.backward()
         optimizer.step()
 
+        if check_stop and check_stop():
+            break
+
         model.eval()
         with torch.no_grad():
             val_output = model(X_val)
@@ -49,6 +52,13 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
         history['r2'].append(r2)
         history['mae'].append(mae)
 
+        if on_epoch_end:
+            on_epoch_end(epoch, num_epochs, loss.item(), val_loss, r2)
+
+        # GPU throttling: sleep to keep GPU utilization within bounds
+        if gpu_throttle_sleep > 0:
+            time.sleep(gpu_throttle_sleep)
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
@@ -61,7 +71,7 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
         model.load_state_dict(best_model_state)
     return model, best_val_loss, history
 
-def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, num_epochs=200, check_stop=None):
+def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, num_epochs=200, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
     X_train = preprocess_for_cnn(X_train_np).to(device)
     X_val = preprocess_for_cnn(X_val_np).to(device)
     y_train = torch.tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
@@ -88,6 +98,9 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
         loss.backward()
         optimizer.step()
 
+        if check_stop and check_stop():
+            break
+
         model.eval()
         with torch.no_grad():
             val_output = model(X_val)
@@ -101,6 +114,13 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
         history['val'].append(val_loss)
         history['r2'].append(r2)
         history['mae'].append(mae)
+
+        if on_epoch_end:
+            on_epoch_end(epoch, num_epochs, loss.item(), val_loss, r2)
+
+        # GPU throttling: sleep to keep GPU utilization within bounds
+        if gpu_throttle_sleep > 0:
+            time.sleep(gpu_throttle_sleep)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -126,6 +146,10 @@ class Objective:
         self.params = params
 
     def __call__(self, trial):
+        if self.params.get('check_stop') and self.params['check_stop']():
+            trial.study.stop()
+            raise optuna.exceptions.TrialPruned("Training aborted by user.")
+
         optimizer = trial.suggest_categorical("optimizer", self.params['optimizers'])
         lr = trial.suggest_float("lr", self.params['lr_min'], self.params['lr_max'], log=True)
         dropout = trial.suggest_float("dropout", self.params['drop_min'], self.params['drop_max'])

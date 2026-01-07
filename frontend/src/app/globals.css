@@ -38,7 +38,7 @@
   }
   h1, h2, h3, h4 {
     @apply font-medium text-[var(--foreground-active)];
-  }
+}
 }
 
 /* Scrollbar: Near invisible utilitarian */
@@ -51,7 +51,7 @@
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #18181b;
   border-radius: 10px;
-}
+  }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #27272a;
 }

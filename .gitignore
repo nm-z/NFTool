@@ -38,3 +38,6 @@ nohup.out
 # Data (Optional, but usually better to keep dataset out of repo if large)
 # dataset/
 
+# Databases
+*.db
+
