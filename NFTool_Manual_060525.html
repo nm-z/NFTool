@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NFTool Manual — Version 060525</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+      color: #222;
+    }
+    h1, h2, h3, h4 {
+      color: #333;
+      margin-top: 1.4em;
+      margin-bottom: 0.6em;
+    }
+    p {
+      margin-bottom: 1em;
+    }
+    ul, ol {
+      margin-bottom: 1em;
+      padding-left: 1.4em;
+    }
+    code {
+      background-color: #eef;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.95em;
+    }
+    pre {
+      background-color: #eef;
+      padding: 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      overflow-x: auto;
+    }
+    a {
+      color: #007acc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .note {
+      background-color: #fffae6;
+      border-left: 4px solid #ffcf4f;
+      padding: 10px;
+      margin: 1em 0;
+    }
+    .small {
+      font-size: 0.9em;
+      color: #555;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1em;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px;
+      text-align: center;
+      font-size: 0.9em;
+      background-color: #fff;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+  </style>
+</head>
+<body>
+  <h1>NFTool Manual — Version 060525</h1>
+  <p><em>Last updated: June 05, 2025</em></p>
+  <hr />
+
+  <h2>1. Introduction</h2>
+  <p>
+    <strong>NFTool</strong> is a command‐line and GUI‐driven Python toolkit for fitting neural‐network models—particularly for high‐dimensional, real‐valued regression data (e.g., RF Vector Network Analyzer (VNA) traces). It leverages PyTorch under the hood and provides an interactive Tkinter‐based workflow to guide users from raw CSV inputs all the way to a trained model, evaluation plots, and a comprehensive HTML report.
+  </p>
+  <p>
+    Key improvements since version 05022025 include:
+  </p>
+  <ul>
+    <li>Support for both a fully‐connected feedforward <strong>NN</strong> (Multilayer Perceptron) and an unfinished 1D‐CNN (<strong>CNNRegressionNet</strong>) architecture. <em>(Note: the CNN path is experimental and not fully supported.)</em></li>
+    <li>Built‐in <em>Levenberg–Marquardt</em> solver (LMNet) remains in the code but is <strong>not recommended</strong> for most use cases at this time.</li>
+    <li>Interactive hyperparameter tuning via Optuna—now including a restricted “dropout + learning‐rate” tuning path when loading an existing model.</li>
+    <li>Enhanced Tkinter GUI prompts with dark styling and expanded parameter choices: seed, model type, early‐stop patience, train/val/test splits, Optuna settings, optimizer bitmask, plus explicit “dropout enabled?” and “learning‐rate mode?” dialogs.</li>
+    <li>Option to specify a target R² (stop criterion) and/or a time limit for Optuna runs.</li>
+    <li>Two‐stage training workflow:
+      <ol>
+        <li>First, run a normal Optuna‐guided search to find a viable architecture (hidden layers, dropout, LR, optimizer).</li>
+        <li>Then, NFTool automatically identifies the run with the highest R² and reruns that configuration on train + val to collect final metrics and figures.</li>
+      </ol>
+    </li>
+    <li>Extended reporting: after training (or tune‐only runs), NFTool saves an HTML report (instead of PDF) containing all figures, configuration summaries, and performance metrics.</li>
+    <li>Support for training on GPU if available; otherwise, automatic fallback to CPU.</li>
+    <li>A future feature (not yet implemented) will allow querying an existing model with new data for inference.</li>
+  </ul>
+  <p>
+    Designed to be modular and extensible, NFTool is ideal for both newcomers and experts who need reproducible, transparent deep‐learning workflows.
+  </p>
+
+  <h3>1.1 Version and Release Notes</h3>
+  <ul>
+    <li><strong>Version 060525</strong> (June 05, 2025):
+      <ul>
+        <li>Introduced <code>CNNRegressionNet</code> (1D CNN) alongside existing MLP, though CNN support remains unfinished.</li>
+        <li>LM solver (<code>LMNet</code>) remains bundled but is no longer recommended for production use.</li>
+        <li>Swapped out manual entry of learning rate/dropout in the full pipeline: all hyperparameters are now chosen by Optuna by default. Manual tuning is only available when loading an existing model.</li>
+        <li>When loading an existing model, NFTool now prompts only for dropout + learning‐rate ranges and runs a restricted Optuna search to fine‐tune those two parameters.</li>
+        <li>Added the ability to specify a target R² stop criterion and/or a time limit (in minutes) for Optuna searches.</li>
+        <li>Implemented a two‐stage training workflow: first, a broad Optuna search to identify the best configuration; then, an automatic rerun of that configuration on the combined train + val set to generate final metrics and figures.</li>
+        <li>Enhanced HTML report to include full “best‐run” summary (R², MAE, loss) and embedded figures.</li>
+        <li>Future functionality: option to query saved models with new data (planned).</li>
+      </ul>
+    </li>
+    <li><strong>Version 05022025</strong> (previous manual):
+      <ul>
+        <li>Supported only fully‐connected NN (RegressionNet), no CNN.</li>
+        <li>Generated PDF reports using FPDF; no HTML output.</li>
+        <li>Optuna hyperparameter search covered layers, dropout, LR, and optimizer; manual LR entry was possible.</li>
+        <li>LM solver support was experimental.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>2. Hardware & Software Requirements</h2>
+  <p>
+    NFTool is written for Python 3.8+ and relies on the following core libraries (install via <code>pip install -r requirements.txt</code>):
+  </p>
+  <ul>
+    <li><code>torch</code>, <code>torchvision</code>, <code>torchviz</code> (if visualizing the network graph)</li>
+    <li><code>scikit-learn</code>, <code>pandas</code>, <code>numpy</code></li>
+    <li><code>optuna</code> (for hyperparameter search)</li>
+    <li><code>matplotlib</code> (for plotting)</li>
+    <li><code>tqdm</code> (for progress bars)</li>
+    <li><code>Pillow</code> (if saving any PNGs via FPDF fallback)</li>
+    <li><code>tkinter</code> (bundled with most Python distributions) for GUI dialogs</li>
+    <li><code>scipy</code> (for LM solver; not recommended)</li>
+    <li><code>joblib</code> (for saving scalers/models)</li>
+  </ul>
+  <p>
+    <strong>Hardware suggestions:</strong>
+  </p>
+  <ul>
+    <li>RAM: ≥ 8 GB (≥ 16 GB recommended for large datasets)</li>
+    <li>CPU: 4 cores minimum; Intel i7/AMD Ryzen 7 or better</li>
+    <li>Disk: ≥ 2 GB free for logs, HTML reports, saved models (SSD strongly recommended)</li>
+    <li>GPU: Optional but highly recommended. Any CUDA‐compatible NVIDIA GPU with ≥ 4 GB VRAM will significantly accelerate both full training and Optuna searches. NFTool will automatically detect and use the GPU if available; otherwise, it runs on CPU.</li>
+  </ul>
+  <div class="note">
+    <strong>Note:</strong> If no GPU is detected, NFTool falls back to CPU. You can double‐check by looking for the “🟢 GPU Available: …” or “🔴 GPU NOT Available: Using CPU” message printed at startup.
+  </div>
+
+  <h2>3. Installation & Setup</h2>
+  <h3>3.1 Clone and Create Virtual Environment</h3>
+  <pre><code>
+# Clone the NFTool repository
+$ git clone https://github.com/yourorg/nftool.git
+$ cd nftool
+
+# Create and activate a virtual environment
+$ python3 -m venv venv
+$ source venv/bin/activate     # Linux/macOS
+$ venv\Scripts\activate        # Windows
+
+# Install dependencies
+$ pip install -r requirements.txt
+  </code></pre>
+
+  <h3>3.2 File & Folder Structure</h3>
+  <p>
+    After installation, you should have:
+  </p>
+  <ul>
+    <li><code>nftool_v2_060525_.py</code> – Main Python script (contains all code).</li>
+    <li><code>requirements.txt</code> – List of Python package dependencies.</li>
+    <li><code>Training Reports/</code> (created at runtime) – HTML reports, saved models, plots, CSV logs.</li>
+    <li><code>Optimization Reports/</code> (created if Optuna is enabled) – CSV logs and figures from hyperparameter searches.</li>
+  </ul>
+  <div class="small">
+    You can rename <code>nftool_v2_060525_.py</code> to <code>nftool.py</code> or wrap it in a shell/batch script if you prefer a shorter command.
+  </div>
+
+  <h2>4. Data Preparation</h2>
+  <p>
+    NFTool expects two clean, numeric CSV files:
+  </p>
+  <ol>
+    <li><strong>Predictors CSV</strong> (X): 2D matrix, shape (<em>n_samples</em>, <em>n_features</em>), no header row.</li>
+    <li><strong>Targets CSV</strong> (y): 1D vector, shape (<em>n_samples</em>), single column, no header.</li>
+  </ol>
+  <p>Both files must:</p>
+  <ul>
+    <li>Contain the same number of rows (<em>n_samples</em>).</li>
+    <li>Be entirely numeric (no NaNs or infinite values). NFTool will apply <code>StandardScaler</code> internally.</li>
+    <li>Have no header lines or non‐numeric characters.</li>
+  </ul>
+  <p><strong>Example (using pandas):</strong></p>
+  <pre><code>import pandas as pd
+
+# Assume `df` is your original DataFrame with a column named “target_column”
+df = df.dropna()
+X = df.drop(columns=["target_column"])
+y = df["target_column"]
+
+# Save cleaned, headerless CSVs
+X.to_csv("predictors.csv", index=False, header=False)
+y.to_csv("targets.csv",  index=False, header=False)
+  </code></pre>
+  <p>
+    NFTool’s first GUI prompt will ask you to select these two CSV files in sequence.
+  </p>
+
+  <h2>5. Configuration & Workflow</h2>
+  <h3>5.1 Launching NFTool</h3>
+  <p>From a terminal, run:</p>
+  <pre><code>python nftool_v2_060525_.py</code></pre>
+  <p>
+    NFTool will open a dark‐themed Tkinter window to collect “Initial Settings.” See below.
+  </p>
+
+  <h3>5.2 Initial Settings (GUI Prompts)</h3>
+  <p>
+    The first prompt collects—in one window—the following values:
+  </p>
+  <ol>
+    <li><strong>Random Seed</strong> (leave blank to randomize; default 42).</li>
+    <li><strong>Model Type</strong> – “NN” (fully connected MLP) or “CNN” (1D‐CNN). <em>(CNN is still experimental.)</em></li>
+    <li><strong>Early‐stop Patience</strong> (integer, default 25 epochs).</li>
+    <li><strong>Train/Val/Test Split (%)</strong> – Three numeric entries that sum to 100 (e.g., 70, 15, 15).</li>
+    <li><strong>Optuna Trials</strong> – Number of hyperparameter search trials (default 50).</li>
+    <li><strong>Specify Target R²?</strong> (checkbox + entry). If checked, enter a floating‐point value (0.0–0.999) to stop Optuna when R² ≥ target.</li>
+    <li><strong>Enable Time Limit?</strong> (checkbox + entry). If checked, enter a time limit in minutes for Optuna search; otherwise, trials run to completion.</li>
+    <li><strong>Optimizer Bitmask</strong> – A string of digits (1–9) indicating which optimizers to include in Optuna search:
+      <br />
+      <code>
+        1=Adam  2=AdamW  3=Adamax  4=SGD  5=RMSprop  6=Rprop  7=LBFGS  8=Adadelta  9=LM
+      </code>
+      <br />
+      Default is “123456789” (all optimizers). <em>(Note: LM is not recommended.)</em>
+    </li>
+  </ol>
+  <p>
+    When you click “OK,” NFTool records these values in a global <code>cfg</code> dict for use during training or Optuna.
+  </p>
+
+  <h3>5.3 “Tune Existing Model?” Prompt</h3>
+  <p>Immediately after initial settings, NFTool asks:</p>
+  <blockquote>
+    <em>“Would you like to load an existing model and fine‐tune only its dropout & learning rate?”</em>
+  </blockquote>
+  <p><strong>Yes:</strong> Opens a file dialog to pick a saved checkpoint (ending in <code>.pth</code> or <code>.pt</code>). After loading, NFTool reconstructs the model architecture from saved fields in the checkpoint, then prompts for:</p>
+  <ol>
+    <li><strong>Dropout Range</strong> (min ≤ max, floats between 0.0 and 1.0; default 0.0–0.5).</li>
+    <li><strong>Learning‐Rate Range</strong> (min ≤ max, floats on log scale; default 1e-5 – 1e-2).</li>
+  </ol>
+  <p>NFTool then launches <code>run_optuna_dropout_lr()</code>, which:</p>
+  <ul>
+    <li>Deep‐copies the loaded model and replaces all <code>nn.Dropout</code> layers with the sampled dropout rate at each trial.</li>
+    <li>Runs a short “mini‐training” (3 epochs) to evaluate each candidate dropout + LR pair on a train/val split.</li>
+    <li>Selects the best pair, rebuilds a final model with that dropout, and retrains on the combined train + val set (10 epochs), saving the fine‐tuned model as <code>fine_tuned_model.pth</code>.</li>
+  </ul>
+  <p>After tuning completes (or if an error occurs), NFTool exits. No full‐pipeline training occurs in this path.</p>
+  <p><strong>No:</strong> NFTool proceeds to the full‐pipeline training branch (described below).</p>
+
+  <h2>6. Full‐Pipeline Training Workflow</h2>
+  <h3>6.1 Selecting Data Files</h3>
+  <p>NFTool asks you to select two CSVs via file dialogs:</p>
+  <ol>
+    <li>Choose your <code>predictors.csv</code> file (shape <em>n_samples × n_features</em>).</li>
+    <li>Choose your <code>targets.csv</code> file (shape <em>n_samples</em>).</li>
+  </ol>
+  <p>NFTool loads these into NumPy arrays, applies <code>StandardScaler</code> to X, and splits into train/val/test according to your percentages.</p>
+
+  <h3>6.2 Model Configuration Prompts</h3>
+  <p>Based on your earlier “Model Type” choice (NN or CNN), NFTool will show additional dialogs:</p>
+  <ul>
+    <li><strong>If “NN”:</strong>
+      <ol>
+        <li><strong>Number of Hidden Layers</strong> (integer 1–500; default 10).</li>
+        <li><strong>Layer Size</strong> – NFTool automatically chooses a size (default 256). Manual entry of layer size is no longer available; Optuna will search over sizes.</li>
+        <li><strong>Use Dropout?</strong> – Yes/No. If Yes, NFTool uses Optuna to choose a value between 0.0 and 0.5. Manual dropout entry is disabled in full‐pipeline mode.</li>
+        <li><strong>Learning‐Rate Mode</strong> – NFTool uses Optuna to search over a range (log‐scale 1e-5 – 1e-2). Manual LR entry is disabled.</li>
+        <li><strong>Select Optimizer</strong> – Combobox listing all chosen optimizers from your initial bitmask (e.g., Adam, SGD, RMSprop). Optuna will include only those choices when sampling.</li>
+      </ol>
+    </li>
+    <li><strong>If “CNN” (experimental):</strong>
+      <ol>
+        <li><strong>Use Dropout?</strong> – Yes/No. If Yes, Optuna samples dropout between 0.0 and 0.5.</li>
+        <li><strong>CNN Hidden Dim</strong> – NFTool uses Optuna to search over hidden dimensions. Manual entry is disabled for full‐pipeline mode.</li>
+        <li><strong>Learning Rate</strong> – Optuna will sample from its chosen range.</li>
+        <li><strong>Select Optimizer</strong> – Combobox from your initial bitmask (e.g., Adam, RMSprop).</li>
+      </ol>
+    </li>
+  </ul>
+  <p>Once all required prompts are answered, NFTool constructs a <code>config</code> dict containing:</p>
+  <pre><code>{
+  "model_choice": "NN",        // or "CNN"
+  "num_layers": 3,             // for NN
+  "dropout_enabled": True,     // full‐pipeline uses Optuna sampling
+  "hidden_dim": 128,           // for CNN (experimental)
+  "lr_search": [1e-5, 1e-2],    // Optuna range
+  "optimizer_choices": ["Adam","SGD","RMSprop", …],
+  "seed": 12345,
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "test_ratio": 0.15,
+  "optuna_trials": 50,
+  "target_r2_value": 0.95,     // or null
+  "optuna_time_limit": 1800    // in seconds, or null
+}
+  </code></pre>
+  <p>Manual entry of specific layer sizes, dropout, or learning rate is no longer part of the full pipeline: Optuna handles all hyperparameter sampling automatically.</p>
+
+  <h3>6.3 Two‐Stage Training & Early Stopping</h3>
+  <p>NFTool’s full‐pipeline now follows a two‐stage Optuna workflow:</p>
+  <ol>
+    <li>
+      <strong>Stage 1: Broad Optuna Search</strong><br />
+      NFTool runs Optuna for the specified number of trials (or until target R² or time limit is reached). At each trial, it:
+      <ul>
+        <li>Samples hidden layer count & sizes (for NN) or <code>hidden_dim</code> (for CNN), dropout rate, LR, and optimizer type.</li>
+        <li>Builds a candidate model, trains for up to 100 epochs with early stopping on validation loss (patience as specified).</li>
+        <li>Records per‐epoch metrics (train/val loss, R², MAE) in a <code>tqdm</code> progress bar; supports <kbd>Ctrl+C</kbd> to pause/resume.</li>
+        <li>If validation loss fails to improve for <em>patience</em> epochs, that trial stops early.</li>
+        <li>Prunes a trial if it fails to meet a target R² (if specified) or if time limit elapses.</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Stage 2: Best‐Run Rerun</strong><br />
+      After Stage 1 completes, NFTool:
+      <ul>
+        <li>Identifies the trial with the highest validation R² (or lowest loss if R² is not enabled).</li>
+        <li>Rebuilds that “best” model configuration (with fixed hidden layers, dropout, LR, optimizer).</li>
+        <li>Retrains it on the combined train + val set for a fixed 10 epochs (early stopping still applies, but typically it benefits from the initial weights).</li>
+        <li>Saves this final model as <code>model.pt</code> and records final metrics (train/val loss, test R², test MAE).</li>
+      </ul>
+    </li>
+  </ol>
+  <p class="note">
+    <strong>LM Solver path:</strong> If the chosen optimizer bitmask includes “9” (LM), NFTool attempts to run the Levenberg–Marquardt method (<code>LMNet</code>), but this is not recommended. NFTool will automatically skip LM-based trials if the model’s parameter count exceeds 10 million or if there are fewer data points than parameters.
+  </p>
+
+  <h3>6.4 Post‐Training Evaluation</h3>
+  <p>After Stage 2 retrains the best model, NFTool computes:</p>
+  <ul>
+    <li>Final Train / Val loss (Stage 2 retraining).</li>
+    <li>R² and MAE on Test set.</li>
+    <li>“Prediction vs Actual” scatter plot (<code>pred_vs_actual.png</code>).</li>
+    <li>Error histogram (<code>error_histogram.png</code>).</li>
+    <li>Residual vs Predicted scatter (for NN models) (<code>resid_vs_pred.png</code>).</li>
+    <li>QQ‐plot of residuals (for NN models) (<code>qq_plot.png</code>).</li>
+    <li>Hyperparameter correlation heatmap (<code>optuna_param_correlation.png</code>, if Optuna used).</li>
+  </ul>
+  <p>All figures are saved to <code>Training Reports/&lt;timestamp&gt;/</code> with descriptive filenames. See Section 9 for a full list.</p>
+
+  <h2>7. HTML Report Generation</h2>
+  <p>NFTool generates a self‐contained HTML report at:</p>
+  <pre><code>Training Reports/NFTool_Report_YYYY-MM-DD_HH-MM.html</code></pre>
+  <p>That HTML report includes:</p>
+  <ul>
+    <li><strong>Training Configuration Summary:</strong> All prompt values (seed, model choice, layer count/range, dropout range, LR range, optimizer choices, splits, Optuna settings, target R², time limit).</li>
+    <li><strong>Stage 1 Results Table:</strong> Top 25 trials by R² (or lowest validation loss), showing trial index, objective (val loss), R², MAE, LR, dropout, optimizer, layer sizes/hidden_dim, and trial duration.</li>
+    <li><strong>Best Trial Summary:</strong> A summary box listing the best trial’s hyperparameters and performance metrics.</li>
+    <li><strong>Stage 2 Final Metrics:</strong> Retraining results on combined train + val (final train/val loss, test R², test MAE).</li>
+    <li><strong>All Figures Inline (as <code>&lt;img&gt;</code> tags):</strong>
+      <ul>
+        <li>Training/validation loss curves (<code>loss_plot.png</code>).</li>
+        <li>MAE & R² evolution per epoch (<code>mae_r2_plot.png</code>).</li>
+        <li>Prediction vs Actual scatter (<code>pred_vs_actual.png</code>).</li>
+        <li>Error histogram (<code>error_histogram.png</code>).</li>
+        <li>Residual vs Predicted scatter (for NN) (<code>resid_vs_pred.png</code>).</li>
+        <li>Residual QQ‐plot (for NN) (<code>qq_plot.png</code>).</li>
+        <li>Optuna optimization history (<code>optuna_optimization_history.png</code>).</li>
+        <li>Optuna parameter importances (<code>optuna_param_importances.png</code>).</li>
+        <li>Optuna parameter correlations (<code>optuna_param_correlation.png</code>).</li>
+        <li>Model architecture diagram via <code>torchviz</code> (<code>model_architecture.png</code>).</li>
+      </ul>
+    </li>
+    <li><strong>Optuna Summary Section (if applicable):</strong>
+      <ul>
+        <li><code>optuna_trials.csv</code> link: contains all trial data.</li>
+        <li><code>top_trials.csv</code> link: top trials by R² (or validation loss).</li>
+        <li><code>optuna_seed.txt</code>: random seed used by Optuna.</li>
+      </ul>
+    </li>
+  </ul>
+  <p>The HTML is styled simply for readability. You can open it in any modern browser or convert it to PDF via “Print → Save as PDF.”</p>
+
+  <h2>8. Optimization Reports (Optuna)</h2>
+  <p>If you enabled Optuna during configuration (Optuna Trials &gt; 0), NFTool creates:</p>
+  <ul>
+    <li><code>Training Reports/&lt;timestamp&gt;/optuna_trials.csv</code> – All trial results: hyperparameters, validation loss, R², MAE, duration.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/top_trials.csv</code> – Subset of the best trials by R² (or val loss), sorted.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/optuna_optimization_history.png</code> – Line plot of objective vs. trial number.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/optuna_param_importances.png</code> – Bar chart of hyperparameter importances.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/optuna_param_correlation.png</code> – Heatmap of hyperparameter correlations.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/optuna_seed.txt</code> – The random seed used by Optuna (for reproducibility).</li>
+  </ul>
+  <p>NFTool uses <code>optuna.visualization.matplotlib</code> for these plots. They are also embedded in the HTML report (Section 7).</p>
+
+  <h2>9. Generated Output Files</h2>
+  <p>During a typical NFTool run (either full‐pipeline training or an existing‐model “dropout + LR tune” path), the following files and folders are created under:</p>
+  <pre><code>Training Reports/&lt;timestamp&gt;/</code></pre>
+  <p>where <code>&lt;timestamp&gt;</code> is in the format <code>YYYY-MM-DD_HH-MM</code> (e.g., <code>2025-06-04_18-38</code>).</p>
+
+  <h3>9.1 Root Folder: <code>Training Reports/&lt;timestamp&gt;/</code></h3>
+  <ul>
+    <li><code>NFTool_Report_&lt;timestamp&gt;.html</code><br />
+      A self‐contained HTML file summarizing the entire run. It includes:
+      <ul>
+        <li><strong>Training Configuration</strong> (file paths, model type, optimizer choices, layer/hidden_dim ranges, dropout range, LR range, splits, seed, target R², time limit).</li>
+        <li><strong>Top 25 Trials by R²</strong> – a table listing trial index, validation loss (objective), R², MAE, LR, dropout, optimizer, layer configuration, and trial duration.</li>
+        <li><strong>Best Trial Summary</strong> – hyperparameters of the best trial and its validation metrics.</li>
+        <li><strong>Stage 2 Final Metrics</strong> – final retraining results on train+val (train/val loss, test R², test MAE).</li>
+        <li><strong>All Figures Inline</strong> (embedding PNGs listed in Section 9.2).</li>
+      </ul>
+    </li>
+    <li><code>model.pt</code><br />
+      The final PyTorch model’s <code>state_dict</code> saved after Stage 2 retraining on the combined train + val set. Use this for inference or further fine‐tuning.
+      <div class="small">If you later choose “Tune Existing Model?”, you can select this file as input.</div>
+    </li>
+    <li><code>scaler.pkl</code><br />
+      A <code>StandardScaler</code> object saved via <code>joblib.dump()</code> that was fitted on the original training data. Use this to transform new predictors at inference time so that they match the same scale as the model saw during training.
+    </li>
+    <li><code>config_&lt;timestamp&gt;.txt</code><br />
+      A plain‐text log of all configuration values and metadata, including:
+      <ul>
+        <li>Random seed</li>
+        <li>Train/Val/Test split ratios</li>
+        <li>Architecture search ranges (layer count, hidden_dim range)</li>
+        <li>Dropout & LR search ranges</li>
+        <li>Optimizer choices</li>
+        <li>Early‐stop patience</li>
+        <li>Optuna settings (number of trials, target R², time limit)</li>
+        <li>Total runtime and timestamps for Stage 1 and Stage 2</li>
+        <li>Final Stage 2 metrics (train/val loss, test R², test MAE)</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h3>9.2 PNG Figures</h3>
+  <p>All PNG files appear in the same <code>&lt;timestamp&gt;</code> folder. Their filenames and purposes are:</p>
+  <table>
+    <tr>
+      <th>Filename</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td><code>loss_plot.png</code></td>
+      <td>Training vs. validation loss curves over epochs for Stage 2 retraining.</td>
+    </tr>
+    <tr>
+      <td><code>mae_r2_plot.png</code></td>
+      <td>Mean Absolute Error (MAE) and R² score evolution on training and validation sets per epoch.</td>
+    </tr>
+    <tr>
+      <td><code>pred_vs_actual.png</code></td>
+      <td>Scatter plot of final predicted values vs. actual targets (on test set), with a 45° reference line.</td>
+    </tr>
+    <tr>
+      <td><code>error_histogram.png</code></td>
+      <td>Histogram of prediction errors (prediction − actual) on test set.</td>
+    </tr>
+    <tr>
+      <td><code>resid_vs_pred.png</code></td>
+      <td>Residuals (error) vs. predicted values scatter plot (only for NN models).</td>
+    </tr>
+    <tr>
+      <td><code>qq_plot.png</code></td>
+      <td>Quantile‐Quantile plot of residuals (error distribution vs. normal) (only for NN models).</td>
+    </tr>
+    <tr>
+      <td><code>optuna_optimization_history.png</code></td>
+      <td>Optuna optimization history: objective (validation loss) vs. trial number for Stage 1.</td>
+    </tr>
+    <tr>
+      <td><code>optuna_param_importances.png</code></td>
+      <td>Bar chart of hyperparameter importances as determined by Optuna’s analysis (Stage 1).</td>
+    </tr>
+    <tr>
+      <td><code>optuna_param_correlation.png</code></td>
+      <td>Heatmap of correlation between hyperparameters (e.g., layer size, dropout, LR) based on Stage 1 trial results.</td>
+    </tr>
+    <tr>
+      <td><code>model_architecture.png</code></td>
+      <td>A visual diagram of the final model’s architecture generated via <code>torchviz</code> (e.g., showing layers, parameters, dropout placements).</td>
+    </tr>
+  </table>
+
+  <h3>9.3 CSV Files</h3>
+  <ul>
+    <li><code>optuna_trials.csv</code><br />
+      Each row corresponds to a single Stage 1 Optuna trial. Columns include:
+      <ul>
+        <li><code>trial_number</code></li>
+        <li><code>value</code> (objective, i.e. validation loss)</li>
+        <li><code>r2_score</code> (R² on validation set)</li>
+        <li><code>mae</code> (Mean Absolute Error on validation set)</li>
+        <li><code>lr</code> (learning rate sampled)</li>
+        <li><code>dropout</code> (dropout rate sampled)</li>
+        <li><code>optimizer</code> (optimizer name sampled)</li>
+        <li><code>num_layers</code> and <code>layer_sizes</code> (for NN) or <code>hidden_dim</code> (for CNN)</li>
+        <li><code>duration_s</code> (trial runtime in seconds)</li>
+      </ul>
+    </li>
+    <li><code>top_trials.csv</code><br />
+      A subset of <code>optuna_trials.csv</code> containing the top 10 trials by highest R² (or lowest validation loss if R² not enabled). Contains the same columns as <code>optuna_trials.csv</code>.<br />
+      <div class="small">Open this in Excel or a text editor to inspect the best hyperparameter sets.</div>
+    </li>
+    <li><code>optuna_seed.txt</code><br />
+      A single‐line text file containing the random seed used by Optuna for reproducibility.<br />
+      <div class="small">If you rerun NFTool with the same seed and settings, you can (in principle) reproduce the same trial order.</div>
+    </li>
+  </ul>
+
+  <h3>9.4 “Tune Existing Model?” Path</h3>
+  <p>If you chose “Yes” at the “Tune Existing Model?” prompt, the following files are generated under <code>Training Reports/&lt;timestamp&gt;/</code>:</p>
+  <ul>
+    <li><code>fine_tuned_model.pth</code><br />
+      The newly fine‐tuned model’s <code>state_dict</code>. It incorporates the best dropout & learning‐rate found by the restricted Optuna search. You can load this file for inference or further training.
+    </li>
+    <li><code>fine_tune_config_&lt;timestamp&gt;.txt</code><br />
+      Logs only:
+      <ul>
+        <li>Original model checkpoint used</li>
+        <li>Dropout & LR ranges provided by the user</li>
+        <li>Best dropout & LR found</li>
+        <li>Optimizer (unchanged)</li>
+        <li>Duration of restricted tuning</li>
+      </ul>
+    </li>
+    <li><code>fine_tune_report_&lt;timestamp&gt;.html</code><br />
+      A smaller HTML summary showing the restricted Optuna results:
+      <ul>
+        <li>Best dropout & LR values</li>
+        <li>Top 5 restricted trials (dropout, LR, objective, MAE, R²)</li>
+        <li>Optuna tuning plots (<code>optuna_param_importances.png</code>, <code>optuna_optimization_history.png</code> as applicable)</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>10. Model Saving & Checkpoints</h2>
+  <p>After full‐pipeline training, NFTool automatically saves:</p>
+  <ul>
+    <li><code>Training Reports/&lt;timestamp&gt;/model.pt</code> – Final PyTorch model <code>state_dict</code>.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/scaler.pkl</code> – Fitted <code>StandardScaler</code> for final normalization (useful for inference).</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/config_&lt;timestamp&gt;.txt</code> – A plain‐text log of all configuration values and metadata, including random seed, splits, search ranges, optimizer choices, early‐stop epoch, and timestamps.</li>
+  </ul>
+  <p>If you later choose “Tune Existing Model?” and select <code>model.pt</code> (or any saved checkpoint), NFTool will load exactly those fields and prompt only for dropout + LR ranges to fine‐tune.</p>
+
+  <h2>11. Command‐Line Usage (Non‐GUI)</h2>
+  <p>NFTool’s current design relies heavily on Tkinter dialogs. However, advanced users can bypass GUI by wrapping calls or editing the script to provide arguments directly. In <code>nftool_v2_060525_.py</code>, command‐line flags are not yet fully implemented, but you can:</p>
+  <ul>
+    <li>Set environment variables for <code>CUDA_VISIBLE_DEVICES</code> or <code>OMP_NUM_THREADS</code> before launching to control GPU/CPU usage.</li>
+    <li>Modify the top of the script to hard‐code a <code>cfg</code> dict and bypass <code>prompt_initial_settings()</code> and other GUI prompts.</li>
+    <li>Future versions may add a <code>--headless</code> or <code>--config config.yaml</code> flag. Check GitHub for updates.</li>
+  </ul>
+
+  <h2>12. Examples</h2>
+  <h3>12.1 Basic NN Training (No Optuna)</h3>
+  <ol>
+    <li>Run <code>python nftool_v2_060525_.py</code>.</li>
+    <li>Initial Settings: Set seed 12345, Model = NN, Patience = 20, Split 70/15/15, Optuna Trials = 0 (Optuna is required now; entering 0 means only Stage 2 on a default configuration), no target R², no time limit, default optimizer bitmask “123456789.”</li>
+    <li>“Tune Existing Model?” → No.</li>
+    <li>Select <code>predictors.csv</code> and <code>targets.csv</code>.</li>
+    <li>NFTool proceeds directly to Stage 2 using a default architecture: 10 hidden layers of 256 units, dropout 0.2, LR 0.001, optimizer Adam. (Optuna is bypassed in Stage 1 since trials = 0.)</li>
+    <li>Stage 2 retrains the default model on combined train + val for up to 10 epochs (early stopping based on patience 20).</li>
+    <li>After training, an HTML report <code>Training Reports/2025-06-05_14-30/NFTool_Report.html</code> appears, along with all PNGs and CSVs in that folder.</li>
+  </ol>
+
+  <h3>12.2 NN with Optuna (20 Trials, Target R² 0.90, Time Limit 30 Minutes)</h3>
+  <ol>
+    <li>Run <code>python nftool_v2_060525_.py</code>.</li>
+    <li>Initial Settings: seed blank (randomize), Model = NN, Patience = 15, Split 80/10/10, Optuna Trials = 20, “Specify target R²?” → Yes 0.90, “Enable Time Limit?” → Yes 30 minutes, Optimizer bitmask → “12345” (Adam, AdamW, Adamax, SGD, RMSprop).</li>
+    <li>“Tune Existing Model?” → No.</li>
+    <li>Select CSVs as usual.</li>
+    <li>NFTool enters Stage 1: runs up to 20 trials or until R² ≥ 0.90 or 30 minutes elapse. Each trial trains a candidate NN with early stopping on train/val.</li>
+    <li>After Stage 1, NFTool picks the best trial (highest R²), then Stage 2 retrains that configuration on combined train + val for up to 10 epochs.</li>
+    <li>Results are saved under <code>Training Reports/&lt;timestamp&gt;/</code>, including <code>model.pt</code>, <code>scaler.pkl</code>, PNG figures, and CSV logs. The HTML report (<code>NFTool_Report.html</code>) embeds all results and figures.</li>
+  </ol>
+
+  <h2>13. Troubleshooting & FAQ</h2>
+  <h3>13.1 Invalid Data Shapes</h3>
+  <p>
+    If you see an error like “Invalid data shape: predictors must be 2D, targets 1D,” confirm that your CSVs have no header rows and match the expected dimensions. Use pandas to inspect:
+  </p>
+  <pre><code>import pandas as pd
+print(pd.read_csv("predictors.csv", header=None).shape)
+print(pd.read_csv("targets.csv",    header=None).shape)
+  </code></pre>
+
+  <h3>13.2 “NaNs/Infs or extreme values detected. Skipping trial.”</h3>
+  <p>
+    This indicates some feature or target value was outside the allowed range (|value| > 1e6), or the model produced Inf/NaN during training. You can:
+  </p>
+  <ul>
+    <li>Rescale or clip your data so that inputs/outputs remain in a reasonable numeric range.</li>
+    <li>Lower the LR (e.g., adjust your Optuna search range) or enable higher dropout.</li>
+    <li>Use simpler architectures (fewer layers, smaller hidden_dim) to improve numerical stability.</li>
+  </ul>
+
+  <h3>13.3 GPU Not Detected / Slow Training</h3>
+  <p>
+    If NFTool prints “🔴 GPU NOT Available: Using CPU,” make sure:
+  </p>
+  <ul>
+    <li>You have a CUDA‐compatible GPU and the correct NVIDIA drivers installed.</li>
+    <li>Your Python environment’s <code>torch</code> is built with CUDA support (e.g., <code>pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu117</code>).</li>
+    <li>If you still wish to run on CPU only, performance may be slower; consider reducing <code>optuna_trials</code> or model complexity.</li>
+  </ul>
+
+  <h3>13.4 “Checkpoint missing ‘model_state_dict’ or ‘state_dict’”</h3>
+  <p>
+    When loading an existing model, NFTool expects saved checkpoints to contain either “<code>model_state_dict</code>” or “<code>state_dict</code>.” If your file was saved under a different key, open it in Python to inspect:
+  </p>
+  <pre><code>import torch
+ckpt = torch.load("my_model.pth", map_location="cpu")
+print(list(ckpt.keys()))
+  </code></pre>
+  <p>
+    Ensure that one of those keys is present. Otherwise, retrain and save the model using NFTool’s default save format.
+  </p>
+
+  <h2>14. Glossary & Terminology</h2>
+  <dl>
+    <dt><strong>MLP / NN (RegressionNet)</strong></dt>
+    <dd>
+      A feedforward neural network with customizable hidden layers, ReLU activations, and optional dropout. For full‐pipeline, layer sizes, dropout, and LR are chosen by Optuna.
+    </dd>
+    <dt><strong>CNN (CNNRegressionNet)</strong></dt>
+    <dd>
+      A 1D convolutional model that treats each feature vector as a single “channel,” applies two Conv1D→ReLU layers, global pooling, and a final linear output. Support is experimental and may be unstable.
+    </dd>
+    <dt><strong>LMNet</strong></dt>
+    <dd>
+      A reference implementation of a simple two‐layer perceptron optimized with the Levenberg–Marquardt algorithm (<code>scipy.optimize.least_squares</code>). Currently not recommended for production use.
+    </dd>
+    <dt><strong>Optuna</strong></dt>
+    <dd>
+      A Python library for automated hyperparameter optimization. NFTool wraps Optuna to search over layer count/sizes, dropout, learning rates, and optimizer selection.
+    </dd>
+    <dt><strong>Dropout</strong></dt>
+    <dd>
+      Regularization technique that randomly zeros a fraction of activations during training to prevent overfitting. In full‐pipeline, Optuna chooses dropout values.
+    </dd>
+    <dt><strong>Early Stopping</strong></dt>
+    <dd>
+      Halting training when validation loss fails to improve for a user‐specified number of epochs (patience).
+    </dd>
+    <dt><strong>R² (Coefficient of Determination)</strong></dt>
+    <dd>
+      A metric that measures how well predictions approximate actual targets. Ranges from –∞ to 1.0; closer to 1.0 is better. Can be used as a stop criterion in Optuna (target R²).
+    </dd>
+    <dt><strong>MAE (Mean Absolute Error)</strong></dt>
+    <dd>
+      The average of absolute differences between predictions and targets.
+    </dd>
+    <dt><strong>Validation Loss</strong></dt>
+    <dd>
+      The error computed on a held‐out validation set; used for early stopping, pruning trials, and selecting the best configuration.
+    </dd>
+  </dl>
+
+  <h2>15. Developer Notes & Extension Ideas</h2>
+  <p>
+    NFTool’s architecture is modular. Below are some pointers for further customization:
+  </p>
+  <h3>15.1 Key Files</h3>
+  <ul>
+    <li><code>nftool_v2_060525_.py</code> – Contains all code: data loading, model classes (<code>RegressionNet</code>, <code>CNNRegressionNet</code>, <code>LMNet</code>), prompt functions, training routines, Optuna objectives, and report generation.</li>
+    <li><code>requirements.txt</code> – Defines package versions. Modify to pin specific versions or add extras.</li>
+    <li><code>Training Reports/&lt;timestamp&gt;/</code> – Output directory for HTML report, PNG figures, saved <code>model.pt</code>, and <code>scaler.pkl</code>, plus CSV logs.</li>
+    <li><code>Optimization Reports/&lt;timestamp&gt;/</code> – Created only if you call <code>optuna.create_study()</code> directly; NFTool writes CSVs and PNGs here.</li>
+  </ul>
+  <h3>15.2 Adding New Model Types</h3>
+  <p>
+    To add another architecture (e.g., RNN, Transformer, or deeper CNN):
+  </p>
+  <ol>
+    <li>Define a new PyTorch <code>nn.Module</code> class alongside <code>RegressionNet</code> and <code>CNNRegressionNet</code>.</li>
+    <li>Modify <code>prompt_initial_settings()</code> to include a new model choice (e.g., “RNN”).</li>
+    <li>Update the <code>if model_choice == …</code> branch in <code>build_model_from_cfg()</code> and in <code>main()</code> so that the correct class is instantiated, its config fields are requested (or sampled by Optuna), and training is dispatched to a new <code>train_rnn_model()</code> function.</li>
+    <li>Extend <code>run_optuna()</code> to sample hyperparameters relevant to the new architecture.</li>
+  </ol>
+
+  <h3>15.3 Headless / CLI‐Only Operation</h3>
+  <p>
+    Currently, NFTool relies on Tkinter. To support headless mode:
+  </p>
+  <ul>
+    <li>Parse a JSON or YAML config file instead of using <code>prompt_*</code> calls. All <code>prompt_*</code> functions can be bypassed if <code>cfg</code> is preloaded from a file.</li>
+    <li>Wrap <code>main()</code> in an <code>if __name__ == "__main__"</code> check that looks for a “--config config.yaml” argument.</li>
+    <li>Document all required fields in that config (seed, model_choice, num_layers/hidden_dim range, dropout range, LR range, optimizer choices, splits, Optuna settings, target R², time limit).</li>
+    <li>Remove or stub out any <code>messagebox.askyesno</code> calls when headless mode is detected.</li>
+  </ul>
+
+  <h3>15.4 Converting HTML Report to PDF</h3>
+  <p>
+    If you still need a PDF, open the generated HTML in Chrome/Edge/Firefox and select “Print → Save as PDF.” This preserves embedded images and formatting. Alternatively, use a command‐line tool like <code>wkhtmltopdf</code>:
+  </p>
+  <pre><code># Example
+wkhtmltopdf Training Reports/2025-06-04_18-38/NFTool_Report_2025-06-04_18-38.html \
+           Training Reports/2025-06-04_18-38/NFTool_Report_2025-06-04_18-38.pdf
+  </code></pre>
+
+  <h2>16. License & Support</h2>
+  <p>
+    NFTool is released under the MIT License. Contributions, issues, and feature requests are welcome on GitHub:
+  </p>
+  <ul>
+    <li>GitHub: <a href="https://github.com/yourorg/nftool" target="_blank">github.com/yourorg/nftool</a></li>
+    <li>Issues: <a href="https://github.com/yourorg/nftool/issues" target="_blank">github.com/yourorg/nftool/issues</a></li>
+    <li>Email Support: <a href="mailto:support@yourorg.com">support@yourorg.com</a></li>
+  </ul>
+  <p>
+    For academic use or collaboration on RF/VNA sensor experiments, please reference the corresponding repository commit hash and this manual version 060525.
+  </p>
+
+  <hr />
+  <p class="small">
+    <strong>© 2025 Plyobotics / NFTool Contributors. All rights reserved.</strong>
+  </p>
+</body>
+</html>

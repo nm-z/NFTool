@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+:root {
+  /* LM Studio Visual System: Utilitarian Zinc */
+  --background: 240 10% 3.9%;    /* zinc-950 */
+  --foreground: 240 5% 65%;      /* zinc-400 secondary */
+  --foreground-active: 0 0% 98%; /* zinc-50 primary */
+  
+  --panel: 240 10% 2%;           /* zinc-950+ for sidebars */
+  --panel-lighter: 240 6% 10%;   /* zinc-900 surface */
+  --border: 240 5% 12%;          /* zinc-800/900 low contrast */
+  --border-muted: 240 5% 8%;     /* even softer separator */
+  
+  --primary: 217.2 91.2% 59.8%;  /* blue-500 accent */
+  --primary-foreground: 222.2 47.4% 11.2%;
+  
+  --input: 240 5% 8%;            /* zinc-900 inputs */
+  --radius: 8px;                 /* consistent 8px scale */
+  
+  /* Spacing Scale (LM Studio Density) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+}
+
+@layer base {
+  * {
+    @apply border-[var(--border)];
+  }
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased font-sans text-[13px] leading-tight selection:bg-[#3b82f6]/20;
+  }
+  h1, h2, h3, h4 {
+    @apply font-medium text-[var(--foreground-active)];
+  }
+}
+
+/* Scrollbar: Near invisible utilitarian */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #18181b;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #27272a;
+}
+
+/* Layout Utilities */
+.pane-border-r { border-right: 1px solid var(--border); }
+.pane-border-l { border-left: 1px solid var(--border); }
+.pane-border-b { border-bottom: 1px solid var(--border); }
+
+/* Command Palette (cmdk) refinement */
+[cmdk-root] {
+  @apply flex flex-col w-full h-full bg-[#09090b] text-[#fafafa] overflow-hidden rounded-lg border border-[#18181b] shadow-2xl;
+}
+[cmdk-input] {
+  @apply w-full border-none p-4 text-[14px] bg-transparent outline-none placeholder-[#52525b];
+}
+[cmdk-item] {
+  @apply flex items-center gap-2 px-4 py-3 text-[13px] cursor-default select-none transition-colors;
+}
+[cmdk-item][aria-selected='true'] {
+  @apply bg-[#18181b] text-[#fafafa];
+}
+[cmdk-group-heading] {
+  @apply px-4 py-2 text-[11px] font-bold text-[#52525b] uppercase tracking-wider;
+}
