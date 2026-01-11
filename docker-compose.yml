@@ -3,21 +3,22 @@ version: '3.8'
 services:
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.backend
     ports:
       - "8001:8001"
     volumes:
-      - .:/app
+      - ./workspace:/app/workspace
+      - ./data:/app/data
     environment:
-      - BASE_WORKSPACE=/app
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      - API_KEY=nftool-dev-key
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "985"
+      - "989"
+    restart: always
 
   frontend:
     build:
@@ -25,8 +26,10 @@ services:
       dockerfile: Dockerfile.frontend
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8001
     depends_on:
       - backend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
+      - NEXT_PUBLIC_API_KEY=nftool-dev-key
+    restart: always
 
