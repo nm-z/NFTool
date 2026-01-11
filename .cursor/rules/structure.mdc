@@ -1,0 +1,26 @@
+---
+alwaysApply: true
+---
+# Project Structure
+
+## Directories
+- `backend/`: FastAPI application and training engine.
+    - `src/`: Source code.
+        - `api.py`: Main backend entrypoint (FastAPI).
+        - `data/`, `models/`, `training/`, `utils/`: Modular logic.
+    - `requirements.txt`: Backend dependencies.
+- `frontend/`: Next.js frontend application.
+- `workspace/`: Runtime artifacts (gitignored).
+    - `nftool.db`: SQLite database for run metadata and logs.
+    - `logs/`: Application logs (e.g., `api.log`).
+    - `runs/`: Training outputs.
+        - `results/`: Optuna trial results and summary.
+        - `reports/`: Model checkpoints and scalers.
+- `data/`: Datasets (CSV).
+- `scripts/`: Developer utilities (e.g., `headless_runner.py`, `legacy_main.py`).
+
+## Core Architectures
+- **Job Running**: Isolated via `multiprocessing.Process` to prevent blocking the API. State is polled from `nftool.db`.
+- **Scaling**: Predictors and targets are scaled using `StandardScaler`. Scalers are saved as `.pkl` in the run directory and loaded during inference for correct input/output transformation.
+- **Authentication**: REST uses `X-API-Key` header. WebSockets use `Sec-WebSocket-Protocol` with `api-key-<KEY>` format.
+- **Path Discovery**: Rooted at `REPO_ROOT` (derived from `api.py` location). `WORKSPACE_DIR` is used for all runtime persistence.

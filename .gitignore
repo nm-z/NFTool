@@ -1,43 +1,17 @@
-__pycache__/
-*.py[cod]
-*$py.class
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-.vscode/
-.idea/
-*.log
-.DS_Store
-
-# Node.js
-node_modules/
-frontend/node_modules/
-.next/
-frontend/.next/
-dist/
-build/
-frontend/dist/
-frontend/build/
-
-# Python artifacts
+# runtime
+workspace/
+Logs/
 results/
 Training Reports/
-api_run.log
-api_sh.log
-api.log
-api_new.log
-api_final.log
-api_cnn_verified.log
-headless.log
-nohup.out
 
-# Data (Optional, but usually better to keep dataset out of repo if large)
-# dataset/
+# python
+.venv/
+__pycache__/
+*.pyc
 
-# Databases
+# frontend
+frontend/.next/
+frontend/node_modules/
+
+# db
 *.db
-

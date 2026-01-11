@@ -40,6 +40,7 @@ interface TrainingState {
   
   // Training Engine State
   isRunning: boolean;
+  isAborting: boolean;
   progress: number;
   currentTrial: number;
   totalTrials: number;
@@ -51,6 +52,9 @@ interface TrainingState {
   hardwareStats: HardwareStats | null;
   
   // Model/Asset State
+  deviceChoice: "cuda" | "cpu";
+  gpuChoice: number;
+  gpuList: {id: number, name: string}[];
   loadedModelPath: string | null;
   activePreset: string;
   hasUnsavedChanges: boolean;
@@ -59,6 +63,7 @@ interface TrainingState {
   setActiveWorkspace: (ws: WorkspaceType) => void;
   setIsAdvancedMode: (mode: boolean) => void;
   setIsRunning: (isRunning: boolean) => void;
+  setIsAborting: (isAborting: boolean) => void;
   setProgress: (progress: number) => void;
   setTrialInfo: (current: number, total: number) => void;
   addLog: (log: LogEntry) => void;
@@ -68,6 +73,9 @@ interface TrainingState {
   addMetric: (metric: MetricPoint) => void;
   setMetricsHistory: (metrics: MetricPoint[]) => void;
   setHardwareStats: (stats: HardwareStats) => void;
+  setDeviceChoice: (device: "cuda" | "cpu") => void;
+  setGpuChoice: (id: number) => void;
+  setGpuList: (gpus: {id: number, name: string}[]) => void;
   setLoadedModelPath: (path: string | null) => void;
   setActivePreset: (preset: string) => void;
   setHasUnsavedChanges: (unsaved: boolean) => void;
@@ -77,6 +85,7 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   activeWorkspace: "Train",
   isAdvancedMode: false,
   isRunning: false,
+  isAborting: false,
   progress: 0,
   currentTrial: 0,
   totalTrials: 0,
@@ -84,6 +93,9 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   result: null,
   metricsHistory: [],
   hardwareStats: null,
+  deviceChoice: "cuda",
+  gpuChoice: 0,
+  gpuList: [],
   loadedModelPath: null,
   activePreset: "Gold Standard MLP",
   hasUnsavedChanges: false,
@@ -91,6 +103,7 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   setActiveWorkspace: (activeWorkspace) => set({ activeWorkspace }),
   setIsAdvancedMode: (isAdvancedMode) => set({ isAdvancedMode }),
   setIsRunning: (isRunning) => set({ isRunning }),
+  setIsAborting: (isAborting) => set({ isAborting }),
   setProgress: (progress) => set({ progress }),
   setTrialInfo: (current, total) => set({ currentTrial: current, totalTrials: total }),
   addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
@@ -100,6 +113,9 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   addMetric: (metric) => set((state) => ({ metricsHistory: [...state.metricsHistory, metric] })),
   setMetricsHistory: (metrics) => set({ metricsHistory: metrics }),
   setHardwareStats: (stats) => set({ hardwareStats: stats }),
+  setDeviceChoice: (deviceChoice) => set({ deviceChoice }),
+  setGpuChoice: (gpuChoice) => set({ gpuChoice }),
+  setGpuList: (gpuList) => set({ gpuList }),
   setLoadedModelPath: (path) => set({ loadedModelPath: path }),
   setActivePreset: (activePreset) => set({ activePreset }),
   setHasUnsavedChanges: (hasUnsavedChanges) => set({ hasUnsavedChanges }),

@@ -2,6 +2,7 @@ import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -10,14 +11,20 @@ import optuna
 from src.models.architectures import model_factory
 from src.data.processing import preprocess_for_cnn
 
-def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, num_epochs=200, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
+def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, 
+                num_epochs=200, batch_size=32, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
     if config is None:
         return None, float("inf"), {'train': [], 'val': [], 'r2': [], 'mae': []}
     
     model = model_factory("NN", input_size, config, device)
     optimizer_class = getattr(optim, config['optimizer'])
-    optimizer = optimizer_class(model.parameters(), lr=config['lr'])
+    optimizer = optimizer_class(model.parameters(), lr=config['lr'], weight_decay=1e-5)
     criterion = nn.MSELoss()
+    
+    train_dataset = TensorDataset(X_train, y_train)
+    # Adjust batch size for small datasets
+    actual_batch_size = min(batch_size, len(X_train))
+    train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True)
     
     best_val_loss = float('inf')
     best_model_state = None
@@ -29,11 +36,16 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
             break
 
         model.train()
-        optimizer.zero_grad()
-        output = model(X_train)
-        loss = criterion(output, y_train)
-        loss.backward()
-        optimizer.step()
+        epoch_loss = 0
+        for batch_X, batch_y in train_loader:
+            optimizer.zero_grad()
+            output = model(batch_X)
+            loss = criterion(output, batch_y)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+        
+        avg_epoch_loss = epoch_loss / len(train_loader)
 
         if check_stop and check_stop():
             break
@@ -47,15 +59,14 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
             r2 = r2_score(targets, preds)
             mae = mean_absolute_error(targets, preds)
 
-        history['train'].append(loss.item())
+        history['train'].append(avg_epoch_loss)
         history['val'].append(val_loss)
         history['r2'].append(r2)
         history['mae'].append(mae)
 
         if on_epoch_end:
-            on_epoch_end(epoch, num_epochs, loss.item(), val_loss, r2)
+            on_epoch_end(epoch, num_epochs, avg_epoch_loss, val_loss, r2)
 
-        # GPU throttling: sleep to keep GPU utilization within bounds
         if gpu_throttle_sleep > 0:
             time.sleep(gpu_throttle_sleep)
 
@@ -71,7 +82,8 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
         model.load_state_dict(best_model_state)
     return model, best_val_loss, history
 
-def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, num_epochs=200, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
+def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, 
+                   num_epochs=200, batch_size=16, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
     X_train = preprocess_for_cnn(X_train_np).to(device)
     X_val = preprocess_for_cnn(X_val_np).to(device)
     y_train = torch.tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
@@ -79,8 +91,14 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
 
     model = model_factory("CNN", X_train.shape[2], config, device)
     optimizer_class = getattr(optim, config['optimizer'])
-    optimizer = optimizer_class(model.parameters(), lr=config['lr'])
+    # Add weight decay for regularization
+    optimizer = optimizer_class(model.parameters(), lr=config['lr'], weight_decay=1e-4)
     criterion = nn.MSELoss()
+
+    train_dataset = TensorDataset(X_train, y_train)
+    # Use smaller batches for 108 samples to get more updates per epoch
+    actual_batch_size = min(batch_size, len(X_train))
+    train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True)
 
     best_val_loss = float('inf')
     best_model_state = None
@@ -92,11 +110,16 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
             break
 
         model.train()
-        optimizer.zero_grad()
-        output = model(X_train)
-        loss = criterion(output, y_train)
-        loss.backward()
-        optimizer.step()
+        epoch_loss = 0
+        for batch_X, batch_y in train_loader:
+            optimizer.zero_grad()
+            output = model(batch_X)
+            loss = criterion(output, batch_y)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+        
+        avg_epoch_loss = epoch_loss / len(train_loader)
 
         if check_stop and check_stop():
             break
@@ -110,15 +133,14 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
             r2 = r2_score(targets, preds)
             mae = mean_absolute_error(targets, preds)
 
-        history['train'].append(loss.item())
+        history['train'].append(avg_epoch_loss)
         history['val'].append(val_loss)
         history['r2'].append(r2)
         history['mae'].append(mae)
 
         if on_epoch_end:
-            on_epoch_end(epoch, num_epochs, loss.item(), val_loss, r2)
+            on_epoch_end(epoch, num_epochs, avg_epoch_loss, val_loss, r2)
 
-        # GPU throttling: sleep to keep GPU utilization within bounds
         if gpu_throttle_sleep > 0:
             time.sleep(gpu_throttle_sleep)
 
@@ -170,7 +192,12 @@ class Objective:
             base_filters = trial.suggest_int("base_filters", self.params['l_size_min'], self.params['l_size_max'])
             h_dim = trial.suggest_int("hidden_dim", int(self.params['h_dim_min']), int(self.params['h_dim_max']))
             
-            conv_layers = [{'out_channels': base_filters * (2**i), 'kernel': 3, 'pool': 2} for i in range(n_conv)]
+            # Use dynamic filter cap if provided in params, otherwise default to a high value
+            cap_min = self.params.get('cnn_filter_cap_min', 512)
+            cap_max = self.params.get('cnn_filter_cap_max', 512)
+            current_cap = trial.suggest_int("cnn_filter_cap", cap_min, cap_max)
+            
+            conv_layers = [{'out_channels': min(base_filters * (2**i), current_cap), 'kernel': 3, 'pool': 2} for i in range(n_conv)]
             config = {'conv_layers': conv_layers, 'hidden_dim': h_dim, 'dropout': dropout, 'lr': lr, 'optimizer': optimizer}
             _, loss, history = train_cnn_model(self.X_train, self.y_train, self.X_val, self.y_val, config, self.device, self.patience)
         

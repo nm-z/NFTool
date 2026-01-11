@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+# Always use this instead of shell scripts
+docker-compose up

@@ -1,0 +1,16 @@
+fastapi
+pydantic
+torch
+pandas
+numpy
+optuna
+psutil
+sqlalchemy
+scikit-learn
+joblib
+uvicorn
+python-multipart
+websockets
+aiofiles
+jinja2
+psutil

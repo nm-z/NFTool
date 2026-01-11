@@ -28,12 +28,13 @@ class CNNRegressionNet(nn.Module):
             dropout: Dropout rate for the head.
         """
         super().__init__()
-        if freq_bins < 10:
+        if freq_bins < 8:
             raise ValueError(f"Input length ({freq_bins}) too short for CNN.")
 
         if conv_layers is None:
             conv_layers = [
-                {'out_channels': 64, 'kernel': 5, 'pool': 2},
+                {'out_channels': 32, 'kernel': 5, 'pool': 2},
+                {'out_channels': 64, 'kernel': 3, 'pool': 2},
                 {'out_channels': 128, 'kernel': 3, 'pool': 2}
             ]
 
@@ -45,25 +46,36 @@ class CNNRegressionNet(nn.Module):
             padding = kernel // 2
             
             layers.append(nn.Conv1d(in_channels, out_channels, kernel_size=kernel, padding=padding))
+            layers.append(nn.BatchNorm1d(out_channels))
             layers.append(nn.ReLU())
             if layer_cfg.get('pool'):
                 layers.append(nn.MaxPool1d(layer_cfg['pool']))
             in_channels = out_channels
 
-        layers.append(nn.AdaptiveAvgPool1d(1))
-        layers.append(nn.Flatten())
+        # Combine Average and Max pooling for richer features
         self.cnn = nn.Sequential(*layers)
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.max_pool = nn.AdaptiveMaxPool1d(1)
+        self.flatten = nn.Flatten()
 
+        # Head input size is 2 * out_channels because we concatenate avg and max pooling
         self.head = nn.Sequential(
-            nn.Linear(in_channels, hidden_dim),
+            nn.Linear(in_channels * 2, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, 1)
         )
 
     def forward(self, x):
         features = self.cnn(x)
-        return self.head(features)
+        avg_f = self.avg_pool(features)
+        max_f = self.max_pool(features)
+        combined = torch.cat([avg_f, max_f], dim=1)
+        flat = self.flatten(combined)
+        return self.head(flat)
 
 def model_factory(model_choice, input_size, config, device):
     if model_choice == "NN":
