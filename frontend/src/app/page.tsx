@@ -111,7 +111,43 @@ export default function Dashboard() {
 
       try {
         const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
-        if (runsRes.ok) setRuns(await runsRes.json());
+        if (runsRes.ok) {
+          const runsJson = await runsRes.json();
+          setRuns(runsJson);
+          // If the backend has persisted logs for the latest run, populate them
+          // as the canonical source of truth so the UI doesn't show stale or
+          // duplicate entries. This replaces the logs state with the stored
+          // run logs on load.
+          if (Array.isArray(runsJson) && runsJson.length > 0) {
+            const latest = runsJson[0] as unknown;
+
+            type BackendLog = { time: string; msg: string; type?: string; epoch?: number | null };
+            const isLog = (v: unknown): v is BackendLog =>
+              !!v && typeof v === "object" && "time" in (v as Record<string, unknown>) && "msg" in (v as Record<string, unknown>);
+            const isLogArray = (arr: unknown): arr is BackendLog[] =>
+              Array.isArray(arr) && arr.every((it) => isLog(it));
+
+            const maybeLogs = (latest as Record<string, unknown>)?.logs;
+            if (isLogArray(maybeLogs)) {
+            type LogEntryLocal = {
+                time: string;
+                msg: string;
+                type: "default" | "info" | "success" | "warn" | "optuna";
+                epoch?: number;
+              };
+              const allowed = ["default", "info", "success", "warn", "optuna"];
+              const normalized: LogEntryLocal[] = maybeLogs.map((l) => ({
+                time: String(l.time),
+                msg: String(l.msg),
+                type: allowed.includes(String(l.type))
+                  ? (String(l.type) as LogEntryLocal["type"])
+                  : "default",
+                epoch: typeof l.epoch === "number" ? (l.epoch as number) : undefined,
+              }));
+              setLogs(normalized);
+            }
+          }
+        }
       } catch (e) {
         console.error("Runs fetch error:", e);
       }
@@ -124,7 +160,7 @@ export default function Dashboard() {
       }
     };
     fetchData();
-  }, [isMounted, setDatasets, setRuns, setGpuList, setSelectedPredictor, setSelectedTarget]);
+  }, [isMounted, setDatasets, setRuns, setGpuList, setSelectedPredictor, setSelectedTarget, setLogs]);
 
   useEffect(() => {
     if (!isMounted) return;

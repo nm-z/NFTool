@@ -93,10 +93,24 @@ class JobQueue:
             asyncio.create_task(self._monitor_active_job())
 
     async def _monitor_active_job(self):
-        if not self.active_process:
-            return
-        while self.active_process.is_alive():
-            await asyncio.sleep(1)
+        # Robustly monitor the active_process. Read the process into a local
+        # variable so we don't race with other coroutines that may clear
+        # `self.active_process`. If the process is cleared to None while we're
+        # running, stop monitoring gracefully.
+        while True:
+            proc = self.active_process
+            if proc is None:
+                # Nothing to monitor.
+                return
+            # Wait while the captured process is alive.
+            try:
+                while proc.is_alive():
+                    await asyncio.sleep(1)
+                break
+            except Exception:
+                # In case proc becomes invalid or raises, bail out of monitoring
+                # loop and continue with cleanup below.
+                break
 
         # Process finished, update status and clear active job.
         # Capture the run id from the active job safely before any other mutations.
@@ -110,12 +124,10 @@ class JobQueue:
         db = SessionLocal()
         try:
             run = db.query(Run).filter(Run.run_id == finished_run_id).first()
-            if (
-                run and cast(TypingAny, run).status == "running"
-            ):  # If not already aborted or failed by other means
-                cast(TypingAny, run).status = (
-                    "completed" if self.active_process.exitcode == 0 else "failed"
-                )
+            if run and cast(TypingAny, run).status == "running":
+                finished_proc = self.active_process
+                exitcode = getattr(finished_proc, "exitcode", None)
+                cast(TypingAny, run).status = "completed" if exitcode == 0 else "failed"
                 db.commit()
                 if finished_run_id is not None:
                     # Lazy import manager for broadcasting
@@ -124,16 +136,16 @@ class JobQueue:
                     db_log_and_broadcast(
                         db,
                         finished_run_id,
-                        f"Job finished with exit code {self.active_process.exitcode}. Status: {cast(TypingAny, run).status}",
+                        f"Job finished with exit code {exitcode}. Status: {cast(TypingAny, run).status}",
                         connection_manager,
                         "info",
                     )
         finally:
             db.close()
 
-        logger.info(
-            f"Job {finished_run_id} finished with exit code {self.active_process.exitcode}"
-        )
+        finished_proc = self.active_process
+        exitcode = getattr(finished_proc, "exitcode", None)
+        logger.info(f"Job {finished_run_id} finished with exit code {exitcode}")
         self.active_job = None
         self.active_process = None
         asyncio.create_task(self.process_queue())

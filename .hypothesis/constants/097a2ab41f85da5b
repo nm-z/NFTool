@@ -1,0 +1,4 @@
+# file: /home/nate/Desktop/NFTool/backend/src/services/training_service.py
+# hypothesis_version: 6.150.0
+
+[0.0, 100, '%H:%M:%S', 'CNN', 'CPU', 'best_model.pt', 'best_r2', 'completed', 'config', 'cpu', 'cuda', 'current_trial', 'device', 'epoch', 'inf', 'info', 'input_size', 'is_running', 'logs', 'loss', 'mae', 'metrics', 'metrics_history', 'model_choice', 'model_state_dict', 'msg', 'nftool', 'on_epoch_end', 'optuna_trials', 'progress', 'r2', 'result', 'run', 'run_id', 'scaler_x.pkl', 'scaler_x_path', 'scaler_y.pkl', 'scaler_y_path', 'status', 'success', 'time', 'total_trials', 'trial', 'type', 'val_loss']

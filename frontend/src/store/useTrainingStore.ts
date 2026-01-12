@@ -178,7 +178,22 @@ export const useTrainingStore = create<TrainingState>((set) => ({
       currentTrial: current ?? 0,
       totalTrials: total ?? 0,
     }),
-  addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
+  addLog: (log) =>
+    set((state) => {
+      try {
+        const exists = state.logs.some(
+          (l) =>
+            l.time === log.time && l.msg === log.msg && (l.epoch ?? null) === (log.epoch ?? null)
+        );
+        if (exists) {
+          // No-op: keep existing logs unchanged
+          return { logs: state.logs };
+        }
+      } catch {
+        // Defensive: fall back to appending if comparison fails
+      }
+      return { logs: [...state.logs, log] };
+    }),
   setLogs: (logs) => set({ logs }),
   setResult: (result) => set({ result }),
   clearLogs: () => set({ logs: [] }),

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 import sys
@@ -7,8 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any, cast as typing_cast
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, status
-from fastapi.exceptions import RequestValidationError
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
@@ -50,9 +48,12 @@ Base.metadata.create_all(bind=engine)
 
 # Auth
 api_key_header = APIKeyHeader(name="X-API-Key")
+# create module-level Depends to avoid function-call-in-default warning
+API_KEY_DEP = Depends(api_key_header)
 
 
-async def verify_api_key(api_key: str = Depends(api_key_header)):
+async def verify_api_key(api_key: str = API_KEY_DEP):
+    """Verify incoming X-API-Key header."""
     if api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key")
     return api_key

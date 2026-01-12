@@ -1,9 +1,15 @@
+"""Training service task runner.
+
+This module contains the long-running training worker invoked by the job
+queue. It persists epoch metrics and logs to the database so the main
+process can forward them to connected WebSocket clients.
+"""
+
 import logging
+from datetime import datetime
 import os
 import shutil
-from typing import Any, Dict
-from typing import Any as TypingAny
-from typing import cast as typing_cast
+from typing import Dict, Any as TypingAny, cast as typing_cast
 
 import joblib
 import numpy as np
@@ -23,11 +29,23 @@ from src.training.engine import Objective, run_optimization
 from src.utils.broadcast_utils import db_log_and_broadcast
 from src.utils.reporting import analyze_optuna_study, generate_regression_plots
 
+
+def _send_metrics_sync(conn_mgr: TypingAny, metric: Dict[str, TypingAny]):
+    """Send a structured metrics TelemetryMessage synchronously."""
+    tm = TelemetryMessage(type="metrics", data=MetricData(**metric))
+    conn_mgr.broadcast_sync(tm)
+
+
+def _send_status_sync(conn_mgr: TypingAny, status_data: Dict[str, TypingAny]):
+    """Send a structured status TelemetryMessage synchronously."""
+    tm = TelemetryMessage(type="status", data=status_data)
+    conn_mgr.broadcast_sync(tm)
+
 logger = logging.getLogger("nftool")
 
 
 def run_training_task(
-    config_dict: Dict[str, Any], run_id: str, connection_manager: TypingAny = None
+    config_dict: Dict[str, TypingAny], run_id: str, connection_manager: TypingAny = None
 ) -> None:
     # Use context manager for DB session and allow exceptions to propagate to the caller.
     with SessionLocal() as db:
@@ -41,7 +59,7 @@ def run_training_task(
         db_log_and_broadcast(
             db,
             run_id,
-            f"Starting training engine for {run_id}...",
+            "Starting training engine for %s..." % run_id,
             connection_manager,
             "info",
         )
@@ -54,7 +72,7 @@ def run_training_task(
             db_log_and_broadcast(
                 db,
                 run_id,
-                f"GPU ACCELERATION ENABLED: {device_name}",
+                "GPU ACCELERATION ENABLED: %s" % device_name,
                 connection_manager,
                 "success",
             )
@@ -62,7 +80,7 @@ def run_training_task(
             device = torch.device("cpu")
             device_name = "CPU"
             db_log_and_broadcast(
-                db, run_id, f"Using device: {device_name}", connection_manager, "info"
+                db, run_id, "Using device: %s" % device_name, connection_manager, "info"
             )
 
         predictor_path = str(config.predictor_path)
@@ -83,14 +101,19 @@ def run_training_task(
         db_log_and_broadcast(
             db,
             run_id,
-            f"Dataset loaded: {len(X_raw)} samples, {X_raw.shape[1]} features",
+            "Dataset loaded: %d samples, %d features" % (len(X_raw), X_raw.shape[1]),
             connection_manager,
             "info",
         )
         db_log_and_broadcast(
             db,
             run_id,
-            f"Split Ratios: {config.train_ratio * 100:.0f}% Train, {config.val_ratio * 100:.0f}% Val, {config.test_ratio * 100:.0f}% Test",
+            "Split Ratios: %d%% Train, %d%% Val, %d%% Test"
+            % (
+                int(config.train_ratio * 100),
+                int(config.val_ratio * 100),
+                int(config.test_ratio * 100),
+            ),
             connection_manager,
             "info",
         )
@@ -126,30 +149,33 @@ def run_training_task(
                 )
                 * 100
             )
+            # Persist progress and metric point to DB so the manager (main process)
+            # can detect new metrics/logs and forward them to connected clients.
             typing_cast(TypingAny, run).progress = current_progress
-            db.commit()
-
-            # Broadcast metrics for live chart
-            metric_data = {
+            # Append metric point to run.metrics_history (ensure list)
+            metric_point = {
                 "trial": typing_cast(int, getattr(run, "current_trial", 0)),
                 "loss": loss,
                 "r2": r2,
-                "mae": 0,  # MAE usually calculated at checkpoint
+                "mae": 0,
                 "val_loss": val_loss,
             }
-            connection_manager.broadcast_sync(
-                TelemetryMessage(type="metrics", data=MetricData(**metric_data))
-            )
+            current_metrics = list(getattr(run, "metrics_history", []) or [])
+            current_metrics.append(metric_point)
+            typing_cast(TypingAny, run).metrics_history = current_metrics
 
-            if epoch % 10 == 0:
-                db_log_and_broadcast(
-                    db,
-                    run_id,
-                    f"Epoch {epoch}/{num_epochs}: val_loss={val_loss:.6f}, r2={r2:.4f}",
-                    connection_manager,
-                    "info",
-                    epoch=epoch,
-                )
+            # Append a short log entry for the epoch so it appears in the process stream.
+            current_logs = list(getattr(run, "logs", []) or [])
+            current_logs.append(
+                {
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "msg": f"Epoch {epoch}/{num_epochs}: val_loss={val_loss:.6f}, r2={r2:.4f}",
+                    "type": "info",
+                    "epoch": epoch,
+                }
+            )
+            typing_cast(TypingAny, run).logs = current_logs
+            db.commit()
 
         def on_checkpoint(trial_num, model, loss, r2, mae):
             checkpoint_path = os.path.join(run_dir, f"best_model_trial_{trial_num}.pt")
@@ -203,27 +229,20 @@ def run_training_task(
             db.commit()
 
             # Broadcast structured metric and status update
-            connection_manager.broadcast_sync(
-                TelemetryMessage(type="metrics", data=MetricData(**metric_point))
-            )
+            # Broadcast structured metric and status update
+            _send_metrics_sync(connection_manager, metric_point)
             if is_new_best:
-                connection_manager.broadcast_sync(
-                    TelemetryMessage(
-                        type="status",
-                        data={
-                            "is_running": True,
-                            "progress": typing_cast(int, getattr(run, "progress", 0)),
-                            "run_id": run_id,
-                            "current_trial": trial_num,
-                            "total_trials": config.optuna_trials,
-                            "result": {
-                                "best_r2": typing_cast(
-                                    float, getattr(run, "best_r2", 0.0)
-                                )
-                            },
-                        },
-                    )
-                )
+                status_payload = {
+                    "is_running": True,
+                    "progress": typing_cast(int, getattr(run, "progress", 0)),
+                    "run_id": run_id,
+                    "current_trial": trial_num,
+                    "total_trials": config.optuna_trials,
+                    "result": {
+                        "best_r2": typing_cast(float, getattr(run, "best_r2", 0.0))
+                    },
+                }
+                _send_status_sync(connection_manager, status_payload)
 
             db_log_and_broadcast(
                 db,
@@ -241,24 +260,18 @@ def run_training_task(
             def __call__(self, trial):
                 typing_cast(TypingAny, run).current_trial = trial.number
                 db.commit()
-                connection_manager.broadcast_sync(
-                    TelemetryMessage(
-                        type="status",
-                        data={
-                            "is_running": True,
-                            "progress": typing_cast(int, getattr(run, "progress", 0)),
-                            "run_id": run_id,
-                            "current_trial": trial.number,
-                            "total_trials": config.optuna_trials,
-                            "metrics_history": getattr(run, "metrics_history", []),
-                            "result": {
-                                "best_r2": typing_cast(
-                                    float, getattr(run, "best_r2", 0.0)
-                                )
-                            },
-                        },
-                    )
-                )
+                status_payload = {
+                    "is_running": True,
+                    "progress": typing_cast(int, getattr(run, "progress", 0)),
+                    "run_id": run_id,
+                    "current_trial": trial.number,
+                    "total_trials": config.optuna_trials,
+                    "metrics_history": getattr(run, "metrics_history", []),
+                    "result": {
+                        "best_r2": typing_cast(float, getattr(run, "best_r2", 0.0))
+                    },
+                }
+                _send_status_sync(connection_manager, status_payload)
                 return super().__call__(trial)
 
         obj = TrackedObjective(
@@ -274,7 +287,10 @@ def run_training_task(
         )
 
         study = run_optimization(
-            f"NFTool_{config.model_choice}", config.optuna_trials, None, obj
+            f"NFTool_{config.model_choice}",
+            config.optuna_trials,
+            None,
+            obj,
         )
 
         # Final Reporting
@@ -315,9 +331,10 @@ def run_training_task(
 
         typing_cast(TypingAny, run).status = "completed"
         db.commit()
-        db_log_and_broadcast(
-            db, run_id, f"Optimization finished. Best R²: {typing_cast(float, getattr(run, 'best_r2', 0.0)):.4f}", connection_manager, "success"
+        msg = "Optimization finished. Best R²: %.4f" % typing_cast(
+            float, getattr(run, "best_r2", 0.0)
         )
+        db_log_and_broadcast(db, run_id, msg, connection_manager, "success")
 
         # Cleanup and final broadcast. Compute final progress from run if available.
         if "device" in locals() and device.type == "cuda":

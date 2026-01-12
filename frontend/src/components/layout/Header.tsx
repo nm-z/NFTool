@@ -49,12 +49,34 @@ export function Header({
     Boolean(activeRun && (activeRun as Record<string, unknown>)["status"] === "running") || isRunning;
   const displayIsStarting =
     Boolean(activeRun && (activeRun as Record<string, unknown>)["status"] === "queued") || isStarting;
+  const extractNumber = (obj: Record<string, unknown> | undefined, ...keys: string[]) => {
+    if (!obj) return undefined;
+    for (const k of keys) {
+      const v = obj[k];
+      if (v != null && !Number.isNaN(Number(v))) return Number(v);
+    }
+    // try nested config
+    const cfg = obj["config"] as Record<string, unknown> | undefined;
+    if (cfg) {
+      for (const k of keys) {
+        const v = cfg[k];
+        if (v != null && !Number.isNaN(Number(v))) return Number(v);
+      }
+    }
+    return undefined;
+  };
+
   const displayCurrentTrial =
-    (activeRun && Number((activeRun as Record<string, unknown>)["current_trial"] ?? currentTrial)) ||
+    extractNumber(activeRun as Record<string, unknown>, "current_trial", "currentTrial") ??
     currentTrial;
   const displayTotalTrials =
-    (activeRun && Number((activeRun as Record<string, unknown>)["total_trials"] ?? totalTrials)) ||
-    totalTrials;
+    extractNumber(
+      activeRun as Record<string, unknown>,
+      "total_trials",
+      "optuna_trials",
+      "optunaTrials",
+      "trials",
+    ) ?? totalTrials;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

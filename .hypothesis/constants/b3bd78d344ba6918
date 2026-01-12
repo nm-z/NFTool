@@ -1,0 +1,4 @@
+# file: /home/nate/Desktop/NFTool/backend/src/services/job_queue.py
+# hypothesis_version: 6.150.0
+
+['Job queue is empty.', 'aborted', 'active_job_id', 'completed', 'config', 'exitcode', 'failed', 'gpu_id', 'info', 'is_aborting', 'is_processing', 'is_running', 'nftool', 'progress', 'queue_size', 'queued', 'run_id', 'running', 'spawn', 'status']
