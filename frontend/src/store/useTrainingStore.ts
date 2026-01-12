@@ -83,7 +83,7 @@ interface TrainingState {
 
 export const useTrainingStore = create<TrainingState>((set) => ({
   activeWorkspace: "Train",
-  isAdvancedMode: false,
+  isAdvancedMode: true,
   isRunning: false,
   isAborting: false,
   progress: 0,
