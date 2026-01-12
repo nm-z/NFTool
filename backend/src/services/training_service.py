@@ -41,12 +41,86 @@ def _send_status_sync(conn_mgr: TypingAny, status_data: Dict[str, TypingAny]):
     tm = TelemetryMessage(type="status", data=status_data)
     conn_mgr.broadcast_sync(tm)
 
+
+def _prepare_data(
+    db: TypingAny,
+    predictor_path: str,
+    target_path: str,
+    config: TrainingConfig,
+    run_dir: str,
+    run_id: str,
+    connection_manager: TypingAny,
+) -> tuple:
+    """Load datasets, fit scalers, split into train/val/test and persist scalers.
+
+    Returns: (X_train, X_val, X_test, y_train, y_val, y_test, scaler_x_path, scaler_y_path, scaler_X, scaler_y)
+    """
+    df_X = load_dataset(predictor_path)
+    df_y = load_dataset(target_path).dropna()
+    min_len = min(len(df_X), len(df_y))
+    X_raw = df_X.iloc[:min_len].values
+    y_raw = df_y.iloc[:min_len].values.flatten()
+
+    scaler_X, scaler_y = StandardScaler(), StandardScaler()
+    X_scaled = scaler_X.fit_transform(X_raw)
+    y_scaled = scaler_y.fit_transform(y_raw.reshape(-1, 1)).flatten()
+
+    os.makedirs(run_dir, exist_ok=True)
+    scaler_x_path = os.path.join(run_dir, "scaler_x.pkl")
+    scaler_y_path = os.path.join(run_dir, "scaler_y.pkl")
+    joblib.dump(scaler_X, scaler_x_path)
+    joblib.dump(scaler_y, scaler_y_path)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y_scaled, test_size=config.test_ratio, random_state=config.seed
+    )
+    val_rel = config.val_ratio / (config.train_ratio + config.val_ratio)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train, y_train, test_size=val_rel, random_state=config.seed
+    )
+
+    # Ensure numpy arrays for shape/reshape access and downstream processing
+    X_train = np.asarray(X_train)
+    X_val = np.asarray(X_val)
+    X_test = np.asarray(X_test)
+    y_train = np.asarray(y_train)
+    y_val = np.asarray(y_val)
+    y_test = np.asarray(y_test)
+
+    # Small status/log messages
+    msg = f"Dataset loaded: {len(X_raw)} samples, {X_raw.shape[1]} features"
+    db_log_and_broadcast(db, run_id, msg, connection_manager, "info")
+    split_msg = (
+        f"Split Ratios: {int(config.train_ratio * 100)}% Train, "
+        f"{int(config.val_ratio * 100)}% Val, {int(config.test_ratio * 100)}% Test"
+    )
+    db_log_and_broadcast(db, run_id, split_msg, connection_manager, "info")
+
+    return (
+        X_train,
+        X_val,
+        X_test,
+        y_train,
+        y_val,
+        y_test,
+        scaler_x_path,
+        scaler_y_path,
+        scaler_X,
+        scaler_y,
+    )
+
 logger = logging.getLogger("nftool")
 
 
 def run_training_task(
     config_dict: Dict[str, TypingAny], run_id: str, connection_manager: TypingAny = None
 ) -> None:
+    """Execute a training run for the provided `config_dict` and `run_id`.
+
+    This function runs in a separate process (spawned by the JobQueue). It
+    persists epoch-level metrics and logs to the database so the manager
+    process can forward them to connected WebSocket clients.
+    """
     # Use context manager for DB session and allow exceptions to propagate to the caller.
     with SessionLocal() as db:
         # Let it crash if run doesn't exist; caller will observe the exception.
@@ -59,7 +133,7 @@ def run_training_task(
         db_log_and_broadcast(
             db,
             run_id,
-            "Starting training engine for %s..." % run_id,
+            f"Starting training engine for {run_id}...",
             connection_manager,
             "info",
         )
@@ -72,7 +146,7 @@ def run_training_task(
             db_log_and_broadcast(
                 db,
                 run_id,
-                "GPU ACCELERATION ENABLED: %s" % device_name,
+                f"GPU ACCELERATION ENABLED: {device_name}",
                 connection_manager,
                 "success",
             )
@@ -80,65 +154,40 @@ def run_training_task(
             device = torch.device("cpu")
             device_name = "CPU"
             db_log_and_broadcast(
-                db, run_id, "Using device: %s" % device_name, connection_manager, "info"
+                db,
+                run_id,
+                f"Using device: {device_name}",
+                connection_manager,
+                "info",
             )
 
         predictor_path = str(config.predictor_path)
         target_path = str(config.target_path)
 
-        df_X = load_dataset(predictor_path)
-        df_y = load_dataset(target_path).dropna()
-        min_len = min(len(df_X), len(df_y))
-        X_raw, y_raw = df_X.iloc[:min_len].values, df_y.iloc[:min_len].values.flatten()
-
-        scaler_X, scaler_y = StandardScaler(), StandardScaler()
-        X_scaled = scaler_X.fit_transform(X_raw)
-        y_scaled = scaler_y.fit_transform(y_raw.reshape(-1, 1)).flatten()
-
+        # Load, scale and split the data; persist scalers and emit initial logs.
         run_dir = os.path.join(REPORTS_DIR, run_id)
-        os.makedirs(run_dir, exist_ok=True)
-
-        db_log_and_broadcast(
+        (
+            X_train,
+            X_val,
+            X_test,
+            y_train,
+            y_val,
+            y_test,
+            scaler_x_path,
+            scaler_y_path,
+            _scaler_X,
+            scaler_y,
+        ) = _prepare_data(
             db,
+            predictor_path,
+            target_path,
+            config,
+            run_dir,
             run_id,
-            "Dataset loaded: %d samples, %d features" % (len(X_raw), X_raw.shape[1]),
             connection_manager,
-            "info",
-        )
-        db_log_and_broadcast(
-            db,
-            run_id,
-            "Split Ratios: %d%% Train, %d%% Val, %d%% Test"
-            % (
-                int(config.train_ratio * 100),
-                int(config.val_ratio * 100),
-                int(config.test_ratio * 100),
-            ),
-            connection_manager,
-            "info",
         )
 
-        scaler_x_path, scaler_y_path = (
-            os.path.join(run_dir, "scaler_x.pkl"),
-            os.path.join(run_dir, "scaler_y.pkl"),
-        )
-        joblib.dump(scaler_X, scaler_x_path)
-        joblib.dump(scaler_y, scaler_y_path)
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_scaled, y_scaled, test_size=config.test_ratio, random_state=config.seed
-        )
-        val_rel = config.val_ratio / (config.train_ratio + config.val_ratio)
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train, y_train, test_size=val_rel, random_state=config.seed
-        )
-        # Ensure numpy arrays for shape/reshape access and downstream processing
-        X_train = np.asarray(X_train)
-        X_val = np.asarray(X_val)
-        X_test = np.asarray(X_test)
-        y_train = np.asarray(y_train)
-        y_val = np.asarray(y_val)
-        y_test = np.asarray(y_test)
+        # Data prepared and scalers persisted by _prepare_data.
 
         def on_epoch_end(epoch, num_epochs, loss, val_loss, r2):
             # Update progress
@@ -166,10 +215,13 @@ def run_training_task(
 
             # Append a short log entry for the epoch so it appears in the process stream.
             current_logs = list(getattr(run, "logs", []) or [])
+            epoch_msg = "Epoch {}/{}: val_loss={:.6f}, r2={:.4f}".format(
+                epoch, num_epochs, val_loss, r2
+            )
             current_logs.append(
                 {
                     "time": datetime.now().strftime("%H:%M:%S"),
-                    "msg": f"Epoch {epoch}/{num_epochs}: val_loss={val_loss:.6f}, r2={r2:.4f}",
+                    "msg": epoch_msg,
                     "type": "info",
                     "epoch": epoch,
                 }
@@ -178,185 +230,266 @@ def run_training_task(
             db.commit()
 
         def on_checkpoint(trial_num, model, loss, r2, mae):
-            checkpoint_path = os.path.join(run_dir, f"best_model_trial_{trial_num}.pt")
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "model_choice": config.model_choice,
-                    "input_size": X_train.shape[1],
-                    "r2": r2,
-                    "mae": mae,
-                    "scaler_x_path": scaler_x_path,
-                    "scaler_y_path": scaler_y_path,
-                    "config": model.config if hasattr(model, "config") else {},
-                },
-                checkpoint_path,
-            )
-
-            best_model_path = os.path.join(run_dir, "best_model.pt")
-            is_new_best = False
-            if not os.path.exists(best_model_path) or r2 > (
-                getattr(run, "best_r2", None)
-                if getattr(run, "best_r2", None) is not None
-                else -float("inf")
-            ):
-                shutil.copy2(checkpoint_path, best_model_path)
-                typing_cast(TypingAny, run).best_r2 = r2
-                db.commit()
-                is_new_best = True
-
-            db.add(
-                ModelCheckpoint(
-                    run_id=run.id,
-                    model_path=checkpoint_path,
-                    scaler_path=scaler_x_path,
-                    r2_score=r2,
-                    params={},
-                )
-            )
-
-            # Append to metrics history in DB
-            history = list(getattr(run, "metrics_history", []) or [])
-            metric_point = {
-                "trial": trial_num,
-                "loss": loss,
-                "r2": r2,
-                "mae": mae,
-                "val_loss": loss,
-            }
-            history.append(metric_point)
-            typing_cast(TypingAny, run).metrics_history = history
-            db.commit()
-
-            # Broadcast structured metric and status update
-            # Broadcast structured metric and status update
-            _send_metrics_sync(connection_manager, metric_point)
-            if is_new_best:
-                status_payload = {
-                    "is_running": True,
-                    "progress": typing_cast(int, getattr(run, "progress", 0)),
-                    "run_id": run_id,
-                    "current_trial": trial_num,
-                    "total_trials": config.optuna_trials,
-                    "result": {
-                        "best_r2": typing_cast(float, getattr(run, "best_r2", 0.0))
-                    },
-                }
-                _send_status_sync(connection_manager, status_payload)
-
-            db_log_and_broadcast(
+            _save_checkpoint(
                 db,
-                run_id,
-                f"Checkpoint saved for Trial #{trial_num} (R²: {r2:.4f})",
+                run,
+                run_dir,
+                trial_num,
+                model,
+                loss,
+                r2,
+                mae,
+                scaler_x_path,
+                scaler_y_path,
                 connection_manager,
-                "success",
+                run_id,
+                config,
             )
 
         params = config.model_dump()
         params["on_epoch_end"] = on_epoch_end
 
-        # Wrapped objective to track trial number
-        class TrackedObjective(Objective):
-            def __call__(self, trial):
-                typing_cast(TypingAny, run).current_trial = trial.number
-                db.commit()
-                status_payload = {
-                    "is_running": True,
-                    "progress": typing_cast(int, getattr(run, "progress", 0)),
-                    "run_id": run_id,
-                    "current_trial": trial.number,
-                    "total_trials": config.optuna_trials,
-                    "metrics_history": getattr(run, "metrics_history", []),
-                    "result": {
-                        "best_r2": typing_cast(float, getattr(run, "best_r2", 0.0))
-                    },
-                }
-                _send_status_sync(connection_manager, status_payload)
-                return super().__call__(trial)
-
-        obj = TrackedObjective(
-            config.model_choice,
-            X_train,
-            y_train,
-            X_val,
-            y_val,
-            device,
-            config.patience,
-            params,
+        obj = _make_tracked_objective(
+            db=db,
+            run=run,
+            run_id=run_id,
+            connection_manager=connection_manager,
+            config=config,
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+            device=device,
+            patience=config.patience,
+            params=params,
             on_checkpoint=on_checkpoint,
         )
 
-        study = run_optimization(
-            f"NFTool_{config.model_choice}",
-            config.optuna_trials,
-            None,
-            obj,
+        def _run_optuna(
+            study_name: str,
+            trials: int,
+            objective: Objective,
+        ):
+            """Run Optuna optimization with the provided Objective and return study."""
+            return run_optimization(study_name, trials, None, objective)
+
+        study = _run_optuna(f"NFTool_{config.model_choice}", config.optuna_trials, obj)
+
+        _finalize_run(
+            db=db,
+            run=run,
+            run_dir=run_dir,
+            study=study,
+            device=device,
+            X_test=X_test,
+            y_test=y_test,
+            scaler_y=scaler_y,
+            connection_manager=connection_manager,
+            run_id=run_id,
+            config=config,
         )
 
-        # Final Reporting
-        db_log_and_broadcast(
-            db, run_id, "Generating diagnostic reports...", connection_manager, "info"
-        )
-        analyze_optuna_study(study, run_dir, run_id)
 
-        # Generate Regression Plots with Best Model
-        best_model_path = os.path.join(run_dir, "best_model.pt")
-        if os.path.exists(best_model_path):
-            checkpoint = torch.load(best_model_path, map_location=device)
-            from src.models.architectures import model_factory
+def _save_checkpoint(
+    db: TypingAny,
+    run: TypingAny,
+    run_dir: str,
+    trial_num: int,
+    model: TypingAny,
+    loss: float,
+    r2: float,
+    mae: float,
+    scaler_x_path: str = "",
+    scaler_y_path: str = "",
+    connection_manager: TypingAny = None,
+    run_id: str = "",
+    config: TypingAny = None,
+) -> None:
+    """Persist a trial checkpoint, update DB history and broadcast updates."""
+    checkpoint_path = os.path.join(run_dir, f"best_model_trial_{trial_num}.pt")
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "model_choice": config.model_choice if config is not None else "NN",
+            "input_size": model.input_size if hasattr(model, "input_size") else None,
+            "r2": r2,
+            "mae": mae,
+            "scaler_x_path": scaler_x_path,
+            "scaler_y_path": scaler_y_path,
+            "config": getattr(model, "config", {}) if hasattr(model, "config") else {},
+        },
+        checkpoint_path,
+    )
 
-            # Merge checkpoint config with original config to ensure required keys exist
-            checkpoint_config = checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
-            merged_config = {**config.model_dump(), **checkpoint_config}
-            best_model = model_factory(
-                config.model_choice,
-                X_train.shape[1],
-                merged_config,
-                device,
-            )
-            best_model.load_state_dict(checkpoint["model_state_dict"])
-            best_model.eval()
-
-            X_test_tensor = torch.tensor(X_test, dtype=torch.float32).to(device)
-            if config.model_choice == "CNN":
-                X_test_tensor = preprocess_for_cnn(X_test).to(device)
-
-            with torch.no_grad():
-                y_pred = best_model(X_test_tensor).cpu().numpy().flatten()
-
-            y_test_orig = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
-            y_pred_orig = scaler_y.inverse_transform(y_pred.reshape(-1, 1)).flatten()
-            generate_regression_plots(y_test_orig, y_pred_orig, RESULTS_DIR)
-            generate_regression_plots(y_test_orig, y_pred_orig, run_dir)
-
-        typing_cast(TypingAny, run).status = "completed"
+    best_model_path = os.path.join(run_dir, "best_model.pt")
+    is_new_best = False
+    previous_best = getattr(run, "best_r2", None)
+    prev_val = previous_best if previous_best is not None else -float("inf")
+    if not os.path.exists(best_model_path) or r2 > prev_val:
+        shutil.copy2(checkpoint_path, best_model_path)
+        typing_cast(TypingAny, run).best_r2 = r2
         db.commit()
-        msg = "Optimization finished. Best R²: %.4f" % typing_cast(
-            float, getattr(run, "best_r2", 0.0)
-        )
-        db_log_and_broadcast(db, run_id, msg, connection_manager, "success")
+        is_new_best = True
 
-        # Cleanup and final broadcast. Compute final progress from run if available.
-        if "device" in locals() and device.type == "cuda":
-            torch.cuda.empty_cache()
-        if "run" in locals() and run:
-            final_progress = 100
-            final_trial = typing_cast(int, getattr(run, "current_trial", 0))
-            final_total = typing_cast(int, getattr(run, "optuna_trials", 0))
-        else:
-            final_progress = 0
-            final_trial = 0
-            final_total = 0
-
-        connection_manager.broadcast_sync(
-            TelemetryMessage(
-                type="status",
-                data={
-                    "is_running": False,
-                    "progress": final_progress,
-                    "run_id": run_id,
-                    "current_trial": final_trial,
-                    "total_trials": final_total,
-                },
-            )
+    db.add(
+        ModelCheckpoint(
+            run_id=run.id,
+            model_path=checkpoint_path,
+            scaler_path=scaler_x_path,
+            r2_score=r2,
+            params={},
         )
+    )
+
+    # Append to metrics history in DB
+    history = list(getattr(run, "metrics_history", []) or [])
+    metric_point = {
+        "trial": trial_num,
+        "loss": loss,
+        "r2": r2,
+        "mae": mae,
+        "val_loss": loss,
+    }
+    history.append(metric_point)
+    typing_cast(TypingAny, run).metrics_history = history
+    db.commit()
+
+    # Broadcast structured metric and status update
+    _send_metrics_sync(connection_manager, metric_point)
+    if is_new_best:
+        status_payload = {
+            "is_running": True,
+            "progress": typing_cast(int, getattr(run, "progress", 0)),
+            "run_id": run_id,
+            "current_trial": trial_num,
+            "total_trials": config.optuna_trials if config is not None else 0,
+            "result": {"best_r2": typing_cast(float, getattr(run, "best_r2", 0.0))},
+        }
+        _send_status_sync(connection_manager, status_payload)
+
+    db_log_and_broadcast(
+        db,
+        run_id,
+        f"Checkpoint saved for Trial #{trial_num} (R²: {r2:.4f})",
+        connection_manager,
+        "success",
+    )
+
+
+def _finalize_run(
+    db: TypingAny,
+    run: TypingAny,
+    run_dir: str,
+    study: TypingAny,
+    device: TypingAny,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    scaler_y: TypingAny,
+    connection_manager: TypingAny,
+    run_id: str,
+    config: TypingAny,
+) -> None:
+    """Generate final reports, plots, set run status and broadcast final state."""
+    db_log_and_broadcast(db, run_id, "Generating diagnostic reports...", connection_manager, "info")
+    analyze_optuna_study(study, run_dir, run_id)
+
+    # Generate Regression Plots with Best Model if available
+    best_model_path = os.path.join(run_dir, "best_model.pt")
+    if os.path.exists(best_model_path):
+        checkpoint = torch.load(best_model_path, map_location=device)
+        from src.models.architectures import model_factory
+
+        checkpoint_config = checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
+        merged_config = {**config.model_dump(), **checkpoint_config}
+        best_model = model_factory(config.model_choice, X_test.shape[1], merged_config, device)
+        best_model.load_state_dict(checkpoint["model_state_dict"])
+        best_model.eval()
+
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32).to(device)
+        if config.model_choice == "CNN":
+            X_test_tensor = preprocess_for_cnn(X_test).to(device)
+
+        with torch.no_grad():
+            y_pred = best_model(X_test_tensor).cpu().numpy().flatten()
+
+        y_test_orig = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
+        y_pred_orig = scaler_y.inverse_transform(y_pred.reshape(-1, 1)).flatten()
+        generate_regression_plots(y_test_orig, y_pred_orig, RESULTS_DIR)
+        generate_regression_plots(y_test_orig, y_pred_orig, run_dir)
+
+    typing_cast(TypingAny, run).status = "completed"
+    db.commit()
+    msg = f"Optimization finished. Best R²: {typing_cast(float, getattr(run, 'best_r2', 0.0)):.4f}"
+    db_log_and_broadcast(db, run_id, msg, connection_manager, "success")
+
+    # Cleanup and final broadcast. Compute final progress from run if available.
+    if "device" in locals() and getattr(device, "type", "") == "cuda":
+        torch.cuda.empty_cache()
+
+    if run:
+        final_progress = 100
+        final_trial = typing_cast(int, getattr(run, "current_trial", 0))
+        final_total = typing_cast(int, getattr(run, "optuna_trials", 0))
+    else:
+        final_progress = 0
+        final_trial = 0
+        final_total = 0
+
+    connection_manager.broadcast_sync(
+        TelemetryMessage(
+            type="status",
+            data={
+                "is_running": False,
+                "progress": final_progress,
+                "run_id": run_id,
+                "current_trial": final_trial,
+                "total_trials": final_total,
+            },
+        )
+    )
+
+
+def _make_tracked_objective(
+    db: TypingAny,
+    run: TypingAny,
+    run_id: str,
+    connection_manager: TypingAny,
+    config: TrainingConfig,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    device: TypingAny,
+    patience: int,
+    params: dict,
+    on_checkpoint: TypingAny,
+) -> Objective:
+    """Create an Objective subclass that updates DB/run state and broadcasts status."""
+
+    class TrackedObjective(Objective):
+        def __call__(self, trial):
+            typing_cast(TypingAny, run).current_trial = trial.number
+            db.commit()
+            status_payload = {
+                "is_running": True,
+                "progress": typing_cast(int, getattr(run, "progress", 0)),
+                "run_id": run_id,
+                "current_trial": trial.number,
+                "total_trials": config.optuna_trials,
+                "metrics_history": getattr(run, "metrics_history", []),
+                "result": {"best_r2": typing_cast(float, getattr(run, "best_r2", 0.0))},
+            }
+            _send_status_sync(connection_manager, status_payload)
+            return super().__call__(trial)
+
+    return TrackedObjective(
+        config.model_choice,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        device,
+        patience,
+        params,
+        on_checkpoint=on_checkpoint,
+    )

@@ -1,5 +1,7 @@
 """Pytest fixtures for NFTool backend tests."""
 
+# pylint: disable=redefined-outer-name
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -16,12 +18,14 @@ TESTING_SESSION_LOCAL = sessionmaker(autocommit=False, autoflush=False, bind=eng
 
 @pytest.fixture(scope="session")
 def db_engine():
+    """Create and destroy the test database engine for the session."""
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture
 def db(db_engine):
+    """Provide a transactional database session for each test."""
     connection = db_engine.connect()
     transaction = connection.begin()
     session = TESTING_SESSION_LOCAL(bind=connection)
@@ -34,13 +38,12 @@ def db(db_engine):
 
 @pytest.fixture
 def client(db):
+    """Create a TestClient that uses the test DB session fixture."""
+
     def override_get_db():
         """Override dependency to provide the test DB session."""
-        try:
-            yield db
-        finally:
-            return
-            
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
         yield c

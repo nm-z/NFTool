@@ -1,12 +1,10 @@
 import time
 import numpy as np
-from typing import Optional, Callable, Tuple, Union
-from typing import Callable, Union
+from typing import Optional, Callable
 
 import optuna
 import torch
-import torch.nn as nn
-import torch.optim as optim
+from torch import nn, optim
 from sklearn.metrics import mean_absolute_error, r2_score
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -26,12 +24,10 @@ def train_model(
     num_epochs: int = 200,
     batch_size: int = 32,
     gpu_throttle_sleep: float = 0.1,
-    check_stop: Optional[Callable[[], bool]] = None,
-    on_epoch_end: Optional[Callable[[int, int, float, float, float], None]] = None,
-    checkpoint_callback: Optional[
-        Callable[[nn.Module, float, float, float], None]
-    ] = None,
-) -> Tuple[Optional[nn.Module], float, dict]:
+    check_stop: Callable[[], bool] | None = None,
+    on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
+    checkpoint_callback: Callable[[nn.Module, float, float, float], None] | None = None,
+) -> tuple[Optional[nn.Module], float, dict]:
     """Train a dense neural network and return (model, best_val_loss, history)."""
     if config is None:
         return None, float("inf"), {"train": [], "val": [], "r2": [], "mae": []}
@@ -108,20 +104,20 @@ def train_model(
 
 
 def train_cnn_model(
-    x_train_np: Union["np.ndarray", torch.Tensor],
-    y_train_np: Union["np.ndarray", torch.Tensor],
-    x_val_np: Union["np.ndarray", torch.Tensor],
-    y_val_np: Union["np.ndarray", torch.Tensor],
+    x_train_np: np.ndarray | torch.Tensor,
+    y_train_np: np.ndarray | torch.Tensor,
+    x_val_np: np.ndarray | torch.Tensor,
+    y_val_np: np.ndarray | torch.Tensor,
     config: dict,
     device: torch.device,
     patience: int,
     num_epochs: int = 200,
     batch_size: int = 16,
     gpu_throttle_sleep: float = 0.1,
-    check_stop: Optional[Callable[[], bool]] = None,
-    on_epoch_end: Optional[Callable[[int, int, float, float, float], None]] = None,
-    checkpoint_callback: Optional[Callable[[nn.Module, float, float, float], None]] = None,
-) -> Tuple[Optional[nn.Module], float, dict]:
+    check_stop: Callable[[], bool] | None = None,
+    on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
+    checkpoint_callback: Callable[[nn.Module, float, float, float], None] | None = None,
+) -> tuple[Optional[nn.Module], float, dict]:
     """Train a CNN model. Inputs can be numpy arrays or torch tensors."""
     x_train = preprocess_for_cnn(x_train_np).to(device)
     x_val = preprocess_for_cnn(x_val_np).to(device)
@@ -200,8 +196,8 @@ def train_cnn_model(
 
 
 class Objective:
-    """
-    Optuna objective wrapper that trains a model for a given trial.
+    """Optuna objective wrapper that trains a model for a given trial.
+
     The object holds training/validation data and configuration and is callable
     by Optuna's study.
     """
@@ -209,14 +205,14 @@ class Objective:
     def __init__(
         self,
         model_choice: str,
-        x_train: Union["np.ndarray", torch.Tensor],
-        y_train: Union["np.ndarray", torch.Tensor],
-        x_val: Union["np.ndarray", torch.Tensor],
-        y_val: Union["np.ndarray", torch.Tensor],
+        x_train: np.ndarray | torch.Tensor,
+        y_train: np.ndarray | torch.Tensor,
+        x_val: np.ndarray | torch.Tensor,
+        y_val: np.ndarray | torch.Tensor,
         device: torch.device,
         patience: int,
         params: dict,
-        on_checkpoint: Optional[Callable[[int, nn.Module, float, float, float], None]] = None,
+        on_checkpoint: Callable[[int, nn.Module, float, float, float], None] | None = None,
     ) -> None:
         """Initialize objective with dataset, device, and hyperparameter bounds."""
         self.model_choice = model_choice
@@ -230,9 +226,7 @@ class Objective:
         self.on_checkpoint = on_checkpoint
 
     def __call__(self, trial: optuna.trial.Trial) -> float:
-        """
-        Execute a single Optuna trial. Returns the final loss for the trial.
-        """
+        """Execute a single Optuna trial and return the final loss."""
         if self.params.get("check_stop") and self.params["check_stop"]():
             trial.study.stop()
             msg = "Training aborted by user."
@@ -252,7 +246,7 @@ class Objective:
         )
 
         def local_checkpoint(
-            model: nn.Module, loss: float, r2: float, mae: float
+            model: nn.Module, loss: float, r2: float, mae: float,
         ) -> None:
             """Local wrapper to call the provided on_checkpoint callback."""
             if self.on_checkpoint:
@@ -355,9 +349,9 @@ def run_optimization(
     n_trials: int,
     timeout: int | None,
     objective_func: Callable[..., float],
-    ) -> optuna.study.Study:
-    """
-    Create and run an Optuna study using the provided objective.
+) -> optuna.study.Study:
+    """Create and run an Optuna study using the provided objective.
+
     Returns the completed Study object.
     """
     study = optuna.create_study(study_name=study_name, direction="minimize")

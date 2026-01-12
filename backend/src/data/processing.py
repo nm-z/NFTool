@@ -36,3 +36,6 @@ def compute_dataset_snr_from_files(predictor_file: str, target_file: str):
     correlation = np.corrcoef(X.mean(axis=1), y)[0, 1]
 
     return float(snr), float(correlation)
+
+
+__all__ = ["load_dataset", "preprocess_for_cnn", "compute_dataset_snr_from_files"]

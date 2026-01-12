@@ -1,11 +1,21 @@
+"""Connection manager for WebSocket clients.
+
+This module manages connected WebSocket clients, broadcasts structured
+telemetry messages, and polls the database for persisted metrics/logs to
+forward to clients. The implementation keeps forwarding lightweight to
+avoid blocking the main event loop.
+"""
+
 import asyncio
 import json
 import logging
 import os
 import sys
 from typing import Any, Dict, List, Optional
+import subprocess
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.config import LOGS_DIR
 from src.database.database import SessionLocal
@@ -31,20 +41,6 @@ logging.basicConfig(
 logger = logging.getLogger("nftool")
 
 
-def log_print(*args, **kwargs):
-    msg = " ".join(map(str, args))
-    logger.info(msg)
-
-
-"""Connection manager for WebSocket clients.
-
-This module manages connected WebSocket clients, broadcasts structured
-telemetry messages, and polls the database for persisted metrics/logs to
-forward to clients. The implementation keeps forwarding lightweight to
-avoid blocking the main event loop.
-"""
-
-
 class ConnectionManager:
     """Manage WebSocket clients and forward telemetry.
 
@@ -59,31 +55,205 @@ class ConnectionManager:
         self.clients: List[WebSocket] = []
         self.client_lock = asyncio.Lock()
         self.loop: Optional[asyncio.AbstractEventLoop] = None
+        # Consolidate tracking maps to reduce instance attribute count.
+        self._tracking: Dict[str, dict] = {
+            "metrics_index": {},
+            "logs_index": {},
+            "status": {},
+            "checkpoint_id": {},
+        }
+
         # Initialize the monitor and probe hardware immediately. If probing fails,
         # abort startup so the application fails loudly rather than reporting fake stats.
         self.monitor = HardwareMonitor()
         try:
             gpu_stats = self.monitor.get_gpu_stats(0)
             system_stats = self.monitor.get_system_stats()
-        except Exception as exc:
+        except (
+            RuntimeError,
+            FileNotFoundError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as exc:
             logger.error("Hardware probe failed during startup; aborting.", exc_info=True)
             raise RuntimeError("Hardware probe failed during startup") from exc
 
         # Require actual measured values; do not fabricate defaults.
-        self.hardware_stats: Dict[str, Any] = {**(gpu_stats or {}), **(system_stats or {})}
+        self._tracking["hardware_stats"] = {**(gpu_stats or {}), **(system_stats or {})}
         self.active_run_id: Optional[str] = None
-        self.current_gpu_id: int = 0
         # Track how many metrics/logs have been forwarded for a given run so
         # we only broadcast new items observed in the DB (useful when the
         # training worker runs in a separate process).
-        self._last_metrics_index: Dict[str, int] = {}
-        self._last_logs_index: Dict[str, int] = {}
-        self._last_status: Dict[str, Dict[str, Any]] = {}
-        self._last_checkpoint_id: Dict[str, int] = {}
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         """Register the asyncio event loop used for threadsafe broadcasts."""
         self.loop = loop
+
+    @property
+    def current_gpu_id(self) -> int:
+        """Access the configured GPU id for monitoring (stored in tracking)."""
+        return int(self._tracking.get("current_gpu_id", 0) or 0)
+
+    @current_gpu_id.setter
+    def current_gpu_id(self, value: int) -> None:
+        """Set the configured GPU id for monitoring."""
+        try:
+            self._tracking["current_gpu_id"] = int(value or 0)
+        except (TypeError, ValueError):
+            self._tracking["current_gpu_id"] = 0
+
+    def _normalize_stats(self, gpu_stats: dict, system_stats: dict) -> dict:
+        """Normalize GPU and system stat keys to the canonical schema.
+
+        Returns a merged dict suitable for constructing `HardwareStats`.
+        """
+        normalized: dict = {}
+
+        # VRAM / memory
+        if "vram_total_gb" in gpu_stats:
+            normalized["vram_total_gb"] = gpu_stats.get("vram_total_gb")
+        elif "gpu_mem_total" in gpu_stats:
+            normalized["vram_total_gb"] = gpu_stats.get("gpu_mem_total")
+
+        if "vram_used_gb" in gpu_stats:
+            normalized["vram_used_gb"] = gpu_stats.get("vram_used_gb")
+        elif "gpu_mem_used" in gpu_stats:
+            normalized["vram_used_gb"] = gpu_stats.get("gpu_mem_used")
+
+        if "vram_percent" in gpu_stats:
+            normalized["vram_percent"] = gpu_stats.get("vram_percent")
+        elif "gpu_mem_percent" in gpu_stats:
+            normalized["vram_percent"] = gpu_stats.get("gpu_mem_percent")
+
+        # GPU utilization / temp
+        if "gpu_use_percent" in gpu_stats:
+            normalized["gpu_use_percent"] = gpu_stats.get("gpu_use_percent")
+        elif "gpu_util" in gpu_stats:
+            normalized["gpu_use_percent"] = gpu_stats.get("gpu_util")
+
+        if "gpu_temp_c" in gpu_stats:
+            normalized["gpu_temp_c"] = gpu_stats.get("gpu_temp_c")
+        elif "gpu_temp" in gpu_stats:
+            normalized["gpu_temp_c"] = gpu_stats.get("gpu_temp")
+
+        # System stats
+        if "cpu_percent" in system_stats:
+            normalized["cpu_percent"] = system_stats.get("cpu_percent")
+        elif "cpu_util" in system_stats:
+            normalized["cpu_percent"] = system_stats.get("cpu_util")
+
+        if "ram_total_gb" in system_stats:
+            normalized["ram_total_gb"] = system_stats.get("ram_total_gb")
+        elif "ram_total" in system_stats:
+            normalized["ram_total_gb"] = system_stats.get("ram_total")
+
+        if "ram_used_gb" in system_stats:
+            normalized["ram_used_gb"] = system_stats.get("ram_used_gb")
+        elif "ram_used" in system_stats:
+            normalized["ram_used_gb"] = system_stats.get("ram_used")
+
+        if "ram_percent" in system_stats:
+            normalized["ram_percent"] = system_stats.get("ram_percent")
+
+        # Merge normalized keys with originals (originals supply any other fields)
+        merged = {**gpu_stats, **system_stats, **normalized}
+        return merged
+
+    def _build_status_snapshot(self, run: Run) -> dict:
+        """Construct a small status snapshot dict for a Run ORM instance."""
+        total_trials = int(getattr(run, "optuna_trials", 0) or 0)
+        cfg = getattr(run, "config", {}) or {}
+        try:
+            cfg_trials = int(cfg.get("optuna_trials") or cfg.get("trials") or 0)
+        except (TypeError, ValueError):
+            cfg_trials = 0
+        if total_trials <= 0 and cfg_trials > 0:
+            total_trials = cfg_trials
+        current_trial = int(getattr(run, "current_trial", 0) or 0)
+        if total_trials > 0 and current_trial > total_trials:
+            current_trial = total_trials
+        return {
+            "is_running": getattr(run, "status", None) == "running",
+            "progress": int(getattr(run, "progress", 0) or 0),
+            "run_id": getattr(run, "run_id", None),
+            "current_trial": current_trial,
+            "total_trials": total_trials,
+            "result": {"best_r2": float(getattr(run, "best_r2", 0.0) or 0.0)},
+        }
+
+    async def _forward_checkpoints(self, db, run: Run) -> None:
+        """Query ModelCheckpoint rows for a run and broadcast them as metric points."""
+        try:
+            ckpts = (
+                db.query(ModelCheckpoint)
+                .join(Run)
+                .filter(ModelCheckpoint.run_id == run.id)
+                .order_by(ModelCheckpoint.id)
+                .all()
+            )
+        except SQLAlchemyError:
+            logger.exception("Failed to query ModelCheckpoint rows")
+            return
+
+        last_ck = self._tracking["checkpoint_id"].get(self.active_run_id, 0)
+        for ck in ckpts:
+            if int(getattr(ck, "id", 0)) <= last_ck:
+                continue
+            trial_num = None
+            try:
+                fname = os.path.basename(str(getattr(ck, "model_path", "") or ""))
+                if "trial_" in fname:
+                    part = fname.split("trial_")[-1]
+                    trial_num = int(part.split(".")[0])
+            except (ValueError, IndexError):
+                trial_num = None
+            r2_val = getattr(ck, "r2_score", None)
+            try:
+                r2_float = float(r2_val) if r2_val is not None else None
+            except (TypeError, ValueError):
+                r2_float = None
+            metric_point = {
+                "trial": int(trial_num or 0),
+                "loss": None,
+                "r2": r2_float,
+                "mae": None,
+                "val_loss": None,
+            }
+            try:
+                ck_tm = TelemetryMessage(type="metrics", data=MetricData(**metric_point))
+                await self.broadcast(ck_tm)
+            except (WebSocketDisconnect, OSError, RuntimeError) as exc:
+                logger.exception("Failed to forward checkpoint-based metric: %s", exc)
+            last_ck = max(last_ck, int(getattr(ck, "id", last_ck)))
+        self._tracking["checkpoint_id"][self.active_run_id] = last_ck
+
+    async def _broadcast_metrics(self, metrics: list[dict]) -> None:
+        """Broadcast a list of persisted metric dicts, skipping already-sent items."""
+        if not metrics:
+            return
+        last_m = self._tracking["metrics_index"].get(self.active_run_id, 0)
+        for m in metrics[last_m:]:
+            try:
+                m_tm = TelemetryMessage(type="metrics", data=MetricData(**m))
+                await self.broadcast(m_tm)
+            except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+                logger.exception("Failed to forward metric point: %s", exc)
+        if self.active_run_id:
+            self._tracking["metrics_index"][self.active_run_id] = len(metrics)
+
+    async def _broadcast_logs(self, logs: list[dict]) -> None:
+        """Broadcast a list of persisted log dicts, skipping already-sent items."""
+        if not logs:
+            return
+        last_l = self._tracking["logs_index"].get(self.active_run_id, 0)
+        for lg in logs[last_l:]:
+            try:
+                l_tm = TelemetryMessage(type="log", data=LogMessage(**lg))
+                await self.broadcast(l_tm)
+            except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+                logger.exception("Failed to forward log entry: %s", exc)
+        if self.active_run_id:
+            self._tracking["logs_index"][self.active_run_id] = len(logs)
 
     async def hardware_monitor_task(self):
         """Background task: poll hardware and DB for updates and forward them.
@@ -104,59 +274,10 @@ class ConnectionManager:
             gpu_id = self.current_gpu_id
             gpu_stats = self.monitor.get_gpu_stats(gpu_id)
             system_stats = self.monitor.get_system_stats()
-            # Normalize legacy keys to the current schema so frontend receives consistent fields.
-            normalized = {}
-            # GPU / VRAM fields (prefer new names if present)
-            if "vram_total_gb" in gpu_stats:
-                normalized["vram_total_gb"] = gpu_stats.get("vram_total_gb")
-            elif "gpu_mem_total" in gpu_stats:
-                normalized["vram_total_gb"] = gpu_stats.get("gpu_mem_total")
-
-            if "vram_used_gb" in gpu_stats:
-                normalized["vram_used_gb"] = gpu_stats.get("vram_used_gb")
-            elif "gpu_mem_used" in gpu_stats:
-                normalized["vram_used_gb"] = gpu_stats.get("gpu_mem_used")
-
-            if "vram_percent" in gpu_stats:
-                normalized["vram_percent"] = gpu_stats.get("vram_percent")
-            elif "gpu_mem_percent" in gpu_stats:
-                normalized["vram_percent"] = gpu_stats.get("gpu_mem_percent")
-
-            # GPU utilization / temp
-            if "gpu_use_percent" in gpu_stats:
-                normalized["gpu_use_percent"] = gpu_stats.get("gpu_use_percent")
-            elif "gpu_util" in gpu_stats:
-                normalized["gpu_use_percent"] = gpu_stats.get("gpu_util")
-
-            if "gpu_temp_c" in gpu_stats:
-                normalized["gpu_temp_c"] = gpu_stats.get("gpu_temp_c")
-            elif "gpu_temp" in gpu_stats:
-                normalized["gpu_temp_c"] = gpu_stats.get("gpu_temp")
-
-            # System stats
-            if "cpu_percent" in system_stats:
-                normalized["cpu_percent"] = system_stats.get("cpu_percent")
-            elif "cpu_util" in system_stats:
-                normalized["cpu_percent"] = system_stats.get("cpu_util")
-
-            if "ram_total_gb" in system_stats:
-                normalized["ram_total_gb"] = system_stats.get("ram_total_gb")
-            elif "ram_total" in system_stats:
-                normalized["ram_total_gb"] = system_stats.get("ram_total")
-
-            if "ram_used_gb" in system_stats:
-                normalized["ram_used_gb"] = system_stats.get("ram_used_gb")
-            elif "ram_used" in system_stats:
-                normalized["ram_used_gb"] = system_stats.get("ram_used")
-
-            if "ram_percent" in system_stats:
-                normalized["ram_percent"] = system_stats.get("ram_percent")
-
-            # Merge normalized with originals (originals provide any other fields)
-            merged = {**gpu_stats, **system_stats, **normalized}
-            # Store a serializable snapshot for other callers
+            # Normalize keys and build a single merged dict
+            merged = self._normalize_stats(gpu_stats, system_stats)
             hw = HardwareStats(**merged)
-            self.hardware_stats = hw.model_dump()
+            self._tracking["hardware_stats"] = hw.model_dump()
             # Broadcast hardware snapshot
             hw_tm = TelemetryMessage(type="hardware", data=hw)
             await self.broadcast(hw_tm)
@@ -177,28 +298,11 @@ class ConnectionManager:
 
                     # Forward new metric points
                     metrics = list(getattr(run, "metrics_history", []) or [])
-                    last_m = self._last_metrics_index.get(self.active_run_id, 0)
-                    for m in metrics[last_m:]:
-                            try:
-                                m_tm = TelemetryMessage(type="metrics", data=MetricData(**m))
-                                await self.broadcast(m_tm)
-                            except Exception:
-                                logger.exception("Failed to forward metric point")
-                            # handled above
-                    if self.active_run_id:
-                        self._last_metrics_index[self.active_run_id] = len(metrics)
+                    await self._broadcast_metrics(metrics)
 
                     # Forward new log entries
                     logs = list(getattr(run, "logs", []) or [])
-                    last_l = self._last_logs_index.get(self.active_run_id, 0)
-                    for lg in logs[last_l:]:
-                            try:
-                                l_tm = TelemetryMessage(type="log", data=LogMessage(**lg))
-                                await self.broadcast(l_tm)
-                            except Exception:
-                                logger.exception("Failed to forward log entry")
-                    if self.active_run_id:
-                        self._last_logs_index[self.active_run_id] = len(logs)
+                    await self._broadcast_logs(logs)
 
                     # Forward status updates (progress, current_trial, status, best_r2)
                     # Build status snapshot with defensively-extracted totals.
@@ -207,7 +311,7 @@ class ConnectionManager:
                     cfg_trials = 0
                     try:
                         cfg_trials = int(cfg.get("optuna_trials") or cfg.get("trials") or 0)
-                    except Exception:
+                    except (TypeError, ValueError):
                         cfg_trials = 0
                     if total_trials <= 0 and cfg_trials > 0:
                         total_trials = cfg_trials
@@ -222,11 +326,11 @@ class ConnectionManager:
                         "total_trials": total_trials,
                         "result": {"best_r2": float(getattr(run, "best_r2", 0.0) or 0.0)},
                     }
-                    last_status = self._last_status.get(self.active_run_id)
+                    last_status = self._tracking["status"].get(self.active_run_id)
                     if last_status != status_snapshot:
                         s_tm = TelemetryMessage(type="status", data=status_snapshot)
                         await self.broadcast(s_tm)
-                        self._last_status[self.active_run_id] = status_snapshot
+                        self._tracking["status"][self.active_run_id] = status_snapshot
 
                     # Also forward any newly created ModelCheckpoint rows as metric points
                     try:
@@ -237,22 +341,24 @@ class ConnectionManager:
                             .order_by(ModelCheckpoint.id)
                             .all()
                         )
-                        last_ck = self._last_checkpoint_id.get(self.active_run_id, 0)
+                        last_ck = self._tracking["checkpoint_id"].get(self.active_run_id, 0)
                         for ck in ckpts:
                             if int(getattr(ck, "id", 0)) <= last_ck:
                                 continue
                             trial_num = None
                             try:
-                                fname = os.path.basename(str(getattr(ck, "model_path", "") or ""))
+                                fname = os.path.basename(
+                                    str(getattr(ck, "model_path", "") or "")
+                                )
                                 if "trial_" in fname:
                                     part = fname.split("trial_")[-1]
                                     trial_num = int(part.split(".")[0])
-                            except Exception:
+                            except (ValueError, IndexError):
                                 trial_num = None
                             r2_val = getattr(ck, "r2_score", None)
                             try:
                                 r2_float = float(r2_val) if r2_val is not None else None
-                            except Exception:
+                            except (TypeError, ValueError):
                                 r2_float = None
                             metric_point = {
                                 "trial": int(trial_num or 0),
@@ -261,26 +367,29 @@ class ConnectionManager:
                                 "mae": None,
                                 "val_loss": None,
                             }
-                                try:
-                                    ck_tm = TelemetryMessage(
-                                        type="metrics", data=MetricData(**metric_point)
-                                    )
-                                    await self.broadcast(ck_tm)
-                                except Exception:
-                                    logger.exception("Failed to forward checkpoint-based metric")
+                            try:
+                                ck_tm = TelemetryMessage(
+                                    type="metrics", data=MetricData(**metric_point)
+                                )
+                                await self.broadcast(ck_tm)
+                            except (WebSocketDisconnect, OSError, RuntimeError) as exc:
+                                logger.exception(
+                                    "Failed to forward checkpoint-based metric: %s", exc
+                                )
                             last_ck = max(last_ck, int(getattr(ck, "id", last_ck)))
-                        self._last_checkpoint_id[self.active_run_id] = last_ck
-                    except Exception:
+                        self._tracking["checkpoint_id"][self.active_run_id] = last_ck
+                    except SQLAlchemyError:
                         logger.exception("Failed to query/forward ModelCheckpoint metrics")
                 finally:
                     if db is not None:
                         try:
                             db.close()
-                        except Exception:
-                            pass
+                        except SQLAlchemyError as exc:
+                            logger.debug("DB close failed: %s", exc)
             await asyncio.sleep(interval)
 
     async def connect(self, websocket: WebSocket, client_api_key: Optional[str] = None):
+        """Accept and register an incoming websocket connection."""
         # Accept without subprotocol when no API key is provided to avoid typing issues.
         if client_api_key:
             await websocket.accept(subprotocol=f"api-key-{client_api_key}")
@@ -290,11 +399,13 @@ class ConnectionManager:
             self.clients.append(websocket)
 
     async def disconnect(self, websocket: WebSocket):
+        """Remove a websocket from the active clients list."""
         async with self.client_lock:
             if websocket in self.clients:
                 self.clients.remove(websocket)
 
     async def broadcast(self, message: TelemetryMessage):
+        """Broadcast a TelemetryMessage to all connected clients (async)."""
         async with self.client_lock:
             if not self.clients:
                 return
@@ -303,15 +414,18 @@ class ConnectionManager:
             for client in list(self.clients):
                 try:
                     await client.send_text(msg_json)
-                except Exception:
+                except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     # Mark client as disconnected; cleanup after attempting all sends
-                    logger.exception("Error sending websocket message to client; scheduling removal")
+                    logger.exception(
+                        "Error sending websocket message to client; scheduling removal: %s", exc
+                    )
                     disconnected.append(client)
             for client in disconnected:
                 if client in self.clients:
                     self.clients.remove(client)
 
     def broadcast_sync(self, message: TelemetryMessage):
+        """Synchronous wrapper to broadcast from other threads."""
         if self.loop:
             asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
@@ -377,7 +491,7 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                     cfg = getattr(latest_run, "config", {}) or {}
                     try:
                         cfg_trials = int(cfg.get("optuna_trials") or cfg.get("trials") or 0)
-                    except Exception:
+                    except (TypeError, ValueError):
                         cfg_trials = 0
                     if total_trials <= 0 and cfg_trials > 0:
                         total_trials = cfg_trials
@@ -394,8 +508,8 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                     }
                     status_msg = TelemetryMessage(type="status", data=status_snapshot).model_dump_json()
                     await websocket.send_text(status_msg)
-                except Exception:
-                    logger.exception("Failed to send initial status snapshot to websocket client")
+                except (WebSocketDisconnect, OSError, RuntimeError) as exc:
+                    logger.exception("Failed to send initial status snapshot to websocket client: %s", exc)
 
                 # Send persisted metrics and logs (one message per item) so client can render
                 # the full history immediately. Mark indexes so the manager doesn't forward
@@ -405,26 +519,26 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                         try:
                             metric_msg = TelemetryMessage(type="metrics", data=MetricData(**m)).model_dump_json()
                             await websocket.send_text(metric_msg)
-                        except Exception:
-                            logger.exception("Failed to send persisted metric to client")
+                        except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+                            logger.exception("Failed to send persisted metric to client: %s", exc)
                     if run_id:
-                        manager._last_metrics_index[run_id] = len(metrics)
-                except Exception:
-                    logger.exception("Failed to send persisted metrics to websocket client")
+                        manager._tracking["metrics_index"][run_id] = len(metrics)
+                except (WebSocketDisconnect, OSError, RuntimeError) as exc:
+                    logger.exception("Failed to send persisted metrics to websocket client: %s", exc)
 
                 try:
                     for lg in logs:
                         try:
                             log_msg = TelemetryMessage(type="log", data=LogMessage(**lg)).model_dump_json()
                             await websocket.send_text(log_msg)
-                        except Exception:
-                            logger.exception("Failed to send persisted log to client")
+                        except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+                            logger.exception("Failed to send persisted log to client: %s", exc)
                     if run_id:
-                        manager._last_logs_index[run_id] = len(logs)
-                except Exception:
-                    logger.exception("Failed to send persisted logs to websocket client")
-        except Exception:
-            logger.exception("Failed to catch up client with persisted run data")
+                        manager._tracking["logs_index"][run_id] = len(logs)
+                except (WebSocketDisconnect, OSError, RuntimeError) as exc:
+                    logger.exception("Failed to send persisted logs to websocket client: %s", exc)
+        except (SQLAlchemyError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+            logger.exception("Failed to catch up client with persisted run data: %s", exc)
 
         while True:
             data = await websocket.receive_text()

@@ -1,10 +1,13 @@
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from src.config import REPO_ROOT
+from src.auth import verify_api_key
 from src.data.processing import load_dataset
 
 router = APIRouter()
+
+__all__ = ["router", "list_datasets", "preview_dataset"]
 
 
 def _ensure_list_like(value):
@@ -18,8 +21,14 @@ def _ensure_list_like(value):
     return [value]
 
 
-@router.get("/datasets")
-def list_datasets():
+@router.get(
+    "/datasets",
+    responses={
+        200: {"description": "List of datasets"},
+        406: {"description": "Missing or invalid API key"},
+    },
+)
+def list_datasets(api_key: str = Depends(verify_api_key)):
     dataset_dir = os.path.join(REPO_ROOT, "data")
     if not os.path.exists(dataset_dir):
         return []
@@ -38,9 +47,9 @@ def list_datasets():
         422: {"description": "Validation error"},
     },
 )
-async def preview_dataset(path: str, rows: int = 10):
+async def preview_dataset(path: str, rows: int = 10, api_key: str = Depends(verify_api_key)):
     target = path
-    if not os.path.exists(target):
+    if not os.path.exists(target) or not os.path.isfile(target):
         raise HTTPException(status_code=404, detail="File not found")
 
     df = load_dataset(target)

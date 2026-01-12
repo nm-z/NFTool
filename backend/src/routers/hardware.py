@@ -3,6 +3,8 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+__all__ = ["router", "list_gpus", "health_check", "get_hardware_capabilities"]
+
 
 @router.get("/gpus")
 def list_gpus():
@@ -23,18 +25,6 @@ def health_check():
         "gpu": torch.cuda.is_available(),
         "device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU",
     }
-
-
-@router.head("/health")
-def health_head():
-    """
-    HEAD handler should return headers only to avoid streaming body issues
-    with certain HTTP clients/test frameworks.
-    """
-    from fastapi import Response
-
-    # Minimal 200 OK with no body
-    return Response(status_code=200)
 
 
 @router.get("/capabilities")
