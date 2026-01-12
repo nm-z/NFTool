@@ -1,3 +1,11 @@
 {
-    "git.ignoreLimitWarning": true
+  "python.defaultInterpreterPath": "/home/nate/Desktop/NFTool/.venv/bin/python",
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+      "backend/tests"
+  ],
+  "python.testing.cwd": "/home/nate/Desktop/NFTool",
+  "python.envFile": "/home/nate/Desktop/NFTool/.env",
+  "git.ignoreLimitWarning": true
 }
