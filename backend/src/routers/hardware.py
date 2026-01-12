@@ -3,7 +3,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-__all__ = ["router", "list_gpus", "health_check", "get_hardware_capabilities"]
+__all__ = ["get_hardware_capabilities", "health_check", "list_gpus", "router"]
 
 
 @router.get("/gpus")

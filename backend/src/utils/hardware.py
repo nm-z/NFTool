@@ -95,7 +95,7 @@ class HardwareMonitor:
                 gpu_stats["vram_total_gb"] = round(total_b / (1024**3), 2)
                 gpu_stats["vram_used_gb"] = round(used_b / (1024**3), 2)
                 gpu_stats["vram_percent"] = (
-                    int((used_b / total_b * 100)) if total_b > 0 else 0
+                    int(used_b / total_b * 100) if total_b > 0 else 0
                 )
         return gpu_stats
 
@@ -105,7 +105,7 @@ class HardwareMonitor:
                 "nvidia-smi",
                 "--query-gpu=utilization.gpu,temperature.gpu,memory.total,memory.used",
                 "--format=csv,noheader,nounits",
-                f"--id={str(gpu_id)}",
+                f"--id={gpu_id!s}",
             ],
             capture_output=True,
             text=True,

@@ -7,14 +7,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.api import app
-from src.database.database import Base, get_db
 from src.config import API_KEY
+from src.database.database import Base, get_db
 
 # Setup an in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_nftool.db"
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 TESTING_SESSION_LOCAL = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 @pytest.fixture(scope="session")
 def db_engine():
@@ -22,6 +25,7 @@ def db_engine():
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
+
 
 @pytest.fixture
 def db(db_engine):
@@ -36,6 +40,7 @@ def db(db_engine):
     transaction.rollback()
     connection.close()
 
+
 @pytest.fixture
 def client(db):
     """Create a TestClient that uses the test DB session fixture."""
@@ -48,6 +53,7 @@ def client(db):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
 
 @pytest.fixture
 def auth_headers():

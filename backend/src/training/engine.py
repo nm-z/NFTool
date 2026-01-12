@@ -1,11 +1,11 @@
 import time
-import numpy as np
-from typing import Optional, Callable
+from collections.abc import Callable
 
+import numpy as np
 import optuna
 import torch
-from torch import nn, optim
 from sklearn.metrics import mean_absolute_error, r2_score
+from torch import nn, optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.data.processing import preprocess_for_cnn
@@ -27,7 +27,7 @@ def train_model(
     check_stop: Callable[[], bool] | None = None,
     on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
     checkpoint_callback: Callable[[nn.Module, float, float, float], None] | None = None,
-) -> tuple[Optional[nn.Module], float, dict]:
+) -> tuple[nn.Module | None, float, dict]:
     """Train a dense neural network and return (model, best_val_loss, history)."""
     if config is None:
         return None, float("inf"), {"train": [], "val": [], "r2": [], "mae": []}
@@ -117,7 +117,7 @@ def train_cnn_model(
     check_stop: Callable[[], bool] | None = None,
     on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
     checkpoint_callback: Callable[[nn.Module, float, float, float], None] | None = None,
-) -> tuple[Optional[nn.Module], float, dict]:
+) -> tuple[nn.Module | None, float, dict]:
     """Train a CNN model. Inputs can be numpy arrays or torch tensors."""
     x_train = preprocess_for_cnn(x_train_np).to(device)
     x_val = preprocess_for_cnn(x_val_np).to(device)
@@ -212,7 +212,8 @@ class Objective:
         device: torch.device,
         patience: int,
         params: dict,
-        on_checkpoint: Callable[[int, nn.Module, float, float, float], None] | None = None,
+        on_checkpoint: Callable[[int, nn.Module, float, float, float], None]
+        | None = None,
     ) -> None:
         """Initialize objective with dataset, device, and hyperparameter bounds."""
         self.model_choice = model_choice
@@ -246,7 +247,10 @@ class Objective:
         )
 
         def local_checkpoint(
-            model: nn.Module, loss: float, r2: float, mae: float,
+            model: nn.Module,
+            loss: float,
+            r2: float,
+            mae: float,
         ) -> None:
             """Local wrapper to call the provided on_checkpoint callback."""
             if self.on_checkpoint:

@@ -6,10 +6,11 @@ process can forward them to connected WebSocket clients.
 """
 
 import logging
-from datetime import datetime
 import os
 import shutil
-from typing import Dict, Any as TypingAny, cast as typing_cast
+from datetime import datetime
+from typing import Any as TypingAny
+from typing import cast as typing_cast
 
 import joblib
 import numpy as np
@@ -30,13 +31,13 @@ from src.utils.broadcast_utils import db_log_and_broadcast
 from src.utils.reporting import analyze_optuna_study, generate_regression_plots
 
 
-def _send_metrics_sync(conn_mgr: TypingAny, metric: Dict[str, TypingAny]):
+def _send_metrics_sync(conn_mgr: TypingAny, metric: dict[str, TypingAny]):
     """Send a structured metrics TelemetryMessage synchronously."""
     tm = TelemetryMessage(type="metrics", data=MetricData(**metric))
     conn_mgr.broadcast_sync(tm)
 
 
-def _send_status_sync(conn_mgr: TypingAny, status_data: Dict[str, TypingAny]):
+def _send_status_sync(conn_mgr: TypingAny, status_data: dict[str, TypingAny]):
     """Send a structured status TelemetryMessage synchronously."""
     tm = TelemetryMessage(type="status", data=status_data)
     conn_mgr.broadcast_sync(tm)
@@ -109,11 +110,12 @@ def _prepare_data(
         scaler_y,
     )
 
+
 logger = logging.getLogger("nftool")
 
 
 def run_training_task(
-    config_dict: Dict[str, TypingAny], run_id: str, connection_manager: TypingAny = None
+    config_dict: dict[str, TypingAny], run_id: str, connection_manager: TypingAny = None
 ) -> None:
     """Execute a training run for the provided `config_dict` and `run_id`.
 
@@ -215,8 +217,8 @@ def run_training_task(
 
             # Append a short log entry for the epoch so it appears in the process stream.
             current_logs = list(getattr(run, "logs", []) or [])
-            epoch_msg = "Epoch {}/{}: val_loss={:.6f}, r2={:.4f}".format(
-                epoch, num_epochs, val_loss, r2
+            epoch_msg = (
+                f"Epoch {epoch}/{num_epochs}: val_loss={val_loss:.6f}, r2={r2:.4f}"
             )
             current_logs.append(
                 {
@@ -390,7 +392,9 @@ def _finalize_run(
     config: TypingAny,
 ) -> None:
     """Generate final reports, plots, set run status and broadcast final state."""
-    db_log_and_broadcast(db, run_id, "Generating diagnostic reports...", connection_manager, "info")
+    db_log_and_broadcast(
+        db, run_id, "Generating diagnostic reports...", connection_manager, "info"
+    )
     analyze_optuna_study(study, run_dir, run_id)
 
     # Generate Regression Plots with Best Model if available
@@ -399,9 +403,13 @@ def _finalize_run(
         checkpoint = torch.load(best_model_path, map_location=device)
         from src.models.architectures import model_factory
 
-        checkpoint_config = checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
+        checkpoint_config = (
+            checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
+        )
         merged_config = {**config.model_dump(), **checkpoint_config}
-        best_model = model_factory(config.model_choice, X_test.shape[1], merged_config, device)
+        best_model = model_factory(
+            config.model_choice, X_test.shape[1], merged_config, device
+        )
         best_model.load_state_dict(checkpoint["model_state_dict"])
         best_model.eval()
 

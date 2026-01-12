@@ -1,7 +1,5 @@
 from fastapi.testclient import TestClient
-
 from src.api import app
-
 
 client = TestClient(app)
 
@@ -17,4 +15,3 @@ def test_missing_api_key_rejected_before_validation():
     data = res.json()
     detail = data.get("detail", "")
     assert "Missing X-API-Key" in detail or "X-API-Key" in detail
-

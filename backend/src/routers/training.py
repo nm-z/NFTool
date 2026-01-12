@@ -2,18 +2,17 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 import joblib
 import numpy as np
 import torch
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from src.auth import verify_api_key
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from src.auth import verify_api_key
 from src.config import (
-    WORKSPACE_DIR,
     REPO_ROOT,
+    WORKSPACE_DIR,
 )
 from src.database.database import get_db
 from src.database.models import ModelCheckpoint, Run
@@ -24,13 +23,13 @@ from ..services.queue_instance import job_queue
 router = APIRouter()
 
 __all__ = [
-    "router",
-    "start_training",
     "abort_training",
-    "load_weights",
     "download_weights",
     "list_runs",
+    "load_weights",
+    "router",
     "run_inference",
+    "start_training",
 ]
 
 
@@ -44,7 +43,9 @@ __all__ = [
     },
 )
 async def start_training(
-    config: TrainingConfig, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)
+    config: TrainingConfig,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key),
 ):
     # Allow queuing multiple training requests (tests may generate concurrent cases).
     # The job queue will manage execution order; do not reject with 400 here.
@@ -54,7 +55,11 @@ async def start_training(
     config_dump = config.model_dump()
     # Auto-fill predictor/target if missing: use files from data directory under REPO_ROOT
     data_dir = os.path.join(REPO_ROOT, "data")
-    available = sorted([f for f in os.listdir(data_dir) if f.endswith(".csv")]) if os.path.exists(data_dir) else []
+    available = (
+        sorted([f for f in os.listdir(data_dir) if f.endswith(".csv")])
+        if os.path.exists(data_dir)
+        else []
+    )
     for path_key in ("predictor_path", "target_path"):
         val = config_dump.get(path_key)
         if isinstance(val, Path):
@@ -64,7 +69,9 @@ async def start_training(
                 if path_key == "predictor_path":
                     config_dump[path_key] = os.path.join("data", available[0])
                 else:
-                    config_dump[path_key] = os.path.join("data", available[1] if len(available) > 1 else available[0])
+                    config_dump[path_key] = os.path.join(
+                        "data", available[1] if len(available) > 1 else available[0]
+                    )
 
     db.add(
         Run(
@@ -91,7 +98,9 @@ async def start_training(
         406: {"description": "Missing or invalid API key"},
     },
 )
-async def abort_training(db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+async def abort_training(
+    db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)
+):
     if await job_queue.abort_active_job(db):
         return {"status": "aborted"}
     # Return 200 even when there is no active job to match test expectations.
@@ -107,7 +116,9 @@ async def abort_training(db: Session = Depends(get_db), api_key: str = Depends(v
         422: {"description": "Validation error"},
     },
 )
-async def load_weights(file: UploadFile = File(...), api_key: str = Depends(verify_api_key)):
+async def load_weights(
+    file: UploadFile = File(...), api_key: str = Depends(verify_api_key)
+):
     # Accept any uploaded file; save it and attempt to inspect. Do not reject
     # based solely on filename extension to be tolerant of test-generated cases.
     upload_dir = os.path.join(WORKSPACE_DIR, "uploads")
@@ -140,7 +151,9 @@ async def load_weights(file: UploadFile = File(...), api_key: str = Depends(veri
         406: {"description": "Missing or invalid API key"},
     },
 )
-async def download_weights(run_id: str, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+async def download_weights(
+    run_id: str, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)
+):
     # verify_api_key dependency already enforces header; continue
     checkpoint = (
         db.query(ModelCheckpoint)
@@ -180,7 +193,10 @@ def list_runs(db: Session = Depends(get_db), api_key: str = Depends(verify_api_k
     },
 )
 async def run_inference(
-    model_path: str, features: List[float], db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)
+    model_path: str,
+    features: list[float],
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key),
 ):
     checkpoint = (
         db.query(ModelCheckpoint)

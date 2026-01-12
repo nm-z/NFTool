@@ -38,4 +38,4 @@ def compute_dataset_snr_from_files(predictor_file: str, target_file: str):
     return float(snr), float(correlation)
 
 
-__all__ = ["load_dataset", "preprocess_for_cnn", "compute_dataset_snr_from_files"]
+__all__ = ["compute_dataset_snr_from_files", "load_dataset", "preprocess_for_cnn"]

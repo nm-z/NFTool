@@ -3,8 +3,9 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from typing import Any, cast as typing_cast
 from datetime import datetime
+from typing import Any
+from typing import cast as typing_cast
 
 from fastapi import Depends, FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,6 +100,7 @@ app.add_middleware(
 app.mount("/results", StaticFiles(directory=RESULTS_DIR), name="results")
 app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
+
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
     """
@@ -110,7 +112,12 @@ async def api_key_middleware(request: Request, call_next):
         path = request.url.path or ""
     except Exception:
         path = ""
-    logger.debug("Incoming request: method=%s path=%s headers=%s", request.method, path, dict(request.headers))
+    logger.debug(
+        "Incoming request: method=%s path=%s headers=%s",
+        request.method,
+        path,
+        dict(request.headers),
+    )
     # For HTTP methods not typically used by the API (e.g., TRACE), return 405
     # Method Not Allowed so behavior matches OpenAPI expectations.
     allowed_http_methods = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
@@ -153,7 +160,9 @@ async def api_key_middleware(request: Request, call_next):
                     if methods:
                         allowed_methods_set.update(m.upper() for m in methods)
             if matched_any and request.method.upper() not in allowed_methods_set:
-                allow_header = ", ".join(sorted(allowed_methods_set)) or "GET, POST, OPTIONS"
+                allow_header = (
+                    ", ".join(sorted(allowed_methods_set)) or "GET, POST, OPTIONS"
+                )
                 return JSONResponse(
                     status_code=405,
                     content={"detail": "Method Not Allowed"},
@@ -166,6 +175,7 @@ async def api_key_middleware(request: Request, call_next):
         # handle authentication/validation. Middleware only enforces unsupported
         # methods (405) above and otherwise forwards to route handlers.
     return await call_next(request)
+
 
 app.include_router(
     training.router, prefix="/api/v1/training", dependencies=[Depends(verify_api_key)]

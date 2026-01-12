@@ -1,6 +1,6 @@
+import logging
 from pathlib import Path
 from typing import Any
-import logging
 
 
 def analyze_optuna_study(study: Any, output_dir: str, _run_id: str) -> None:
@@ -15,7 +15,9 @@ def analyze_optuna_study(study: Any, output_dir: str, _run_id: str) -> None:
 
     try:
         import optuna.visualization as vis  # type: ignore
-    except Exception as exc:  # missing optional dependency (plotly/kaleido) or import error
+    except (
+        Exception
+    ) as exc:  # missing optional dependency (plotly/kaleido) or import error
         logger.info("Optuna plotting skipped: %s", exc)
         return
 
@@ -33,7 +35,11 @@ def analyze_optuna_study(study: Any, output_dir: str, _run_id: str) -> None:
         # 3. Parallel Coordinate
         fig = vis.plot_parallel_coordinate(study)
         fig.write_image(str(out / "optuna_parallel_coordinate.png"))
-    except (ValueError, ImportError, OSError) as exc:  # guard against runtime plotting errors (kaleido/plotly issues)
+    except (
+        ValueError,
+        ImportError,
+        OSError,
+    ) as exc:  # guard against runtime plotting errors (kaleido/plotly issues)
         logger.info("Optuna plotting failed: %s", exc)
         return
 

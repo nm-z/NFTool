@@ -2,7 +2,7 @@ import asyncio
 import logging
 import multiprocessing
 from collections import deque
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 from typing import Any as TypingAny
 
 from sqlalchemy.orm import Session
@@ -17,15 +17,15 @@ logger = logging.getLogger("nftool")
 class JobQueue:
     def __init__(self):
         self.queue = deque()
-        self.active_job: Optional[Dict[str, Any]] = None
+        self.active_job: dict[str, Any] | None = None
         # Use a loose typing for the active process object coming from
         # multiprocessing contexts (ctx.Process). Static checkers can be
         # conservative here; accept any to avoid false-positive "cannot assign"
         # errors.
-        self.active_process: Optional[TypingAny] = None
+        self.active_process: TypingAny | None = None
         self.queue_lock = asyncio.Lock()
 
-    async def add_job(self, config_dict: Dict[str, Any], run_id: str):
+    async def add_job(self, config_dict: dict[str, Any], run_id: str):
         async with self.queue_lock:
             self.queue.append({"config": config_dict, "run_id": run_id})
             db = SessionLocal()

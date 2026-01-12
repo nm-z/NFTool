@@ -1,7 +1,6 @@
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 from src.config import REPO_ROOT, WORKSPACE_DIR
@@ -17,7 +16,7 @@ class TrainingConfig(BaseModel):
     val_ratio: float = Field(default=0.15, ge=0.05, le=0.45)
     test_ratio: float = Field(default=0.15, ge=0.05, le=0.45)
     optuna_trials: int = Field(default=10, ge=1, le=1000)
-    optimizers: List[str] = Field(default=["AdamW"])
+    optimizers: list[str] = Field(default=["AdamW"])
     n_layers_min: int = Field(default=1, ge=1, le=20)
     n_layers_max: int = Field(default=8, ge=1, le=20)
     l_size_min: int = Field(default=128, ge=8, le=2048)
@@ -39,8 +38,8 @@ class TrainingConfig(BaseModel):
     gpu_id: int = Field(default=0, ge=0)
     # Allow empty strings so schemathesis-generated cases without file paths
     # don't cause a 422; we'll validate/fill these server-side when starting.
-    predictor_path: Optional[str] = Field(default="")
-    target_path: Optional[str] = Field(default="")
+    predictor_path: str | None = Field(default="")
+    target_path: str | None = Field(default="")
 
     @model_validator(mode="before")
     def reject_boolean_numeric(cls, values):
@@ -79,7 +78,9 @@ class TrainingConfig(BaseModel):
         ]
         for field_name in int_fields + float_fields:
             if field_name in values and isinstance(values[field_name], bool):
-                raise ValueError(f"Invalid type for {field_name}: boolean is not allowed")
+                raise ValueError(
+                    f"Invalid type for {field_name}: boolean is not allowed"
+                )
         return values
 
     @model_validator(mode="after")
@@ -116,12 +117,16 @@ class TrainingConfig(BaseModel):
         for field_name in int_fields + float_fields:
             value = getattr(self, field_name, None)
             if isinstance(value, bool):
-                raise ValueError(f"Invalid type for {field_name}: boolean is not allowed")
+                raise ValueError(
+                    f"Invalid type for {field_name}: boolean is not allowed"
+                )
 
         # Validate ratios
         total = self.train_ratio + self.val_ratio + self.test_ratio
         if not (0.99 <= total <= 1.01):
-            logger.warning("Ratios do not sum to 1.0 (got %.2f); proceeding without error", total)
+            logger.warning(
+                "Ratios do not sum to 1.0 (got %.2f); proceeding without error", total
+            )
 
         # Validate paths
         base_path = Path(REPO_ROOT).resolve()
@@ -134,9 +139,9 @@ class TrainingConfig(BaseModel):
                 continue
             try:
                 target_path = Path(path_field).resolve()
-                if not target_path.is_relative_to(workspace_root) and not target_path.is_relative_to(
-                    data_root
-                ):
+                if not target_path.is_relative_to(
+                    workspace_root
+                ) and not target_path.is_relative_to(data_root):
                     logger.warning(
                         "Access denied for provided path %s; proceeding without strict enforcement",
                         target_path,
@@ -147,6 +152,9 @@ class TrainingConfig(BaseModel):
                 # If the provided value cannot be parsed as a filesystem path
                 # (e.g., contains invalid or non-filesystem characters), don't
                 # reject the entire request; log and continue.
-                logger.warning("Could not parse provided path %s; skipping strict checks", path_field)
+                logger.warning(
+                    "Could not parse provided path %s; skipping strict checks",
+                    path_field,
+                )
 
         return self

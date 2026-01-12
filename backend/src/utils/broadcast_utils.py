@@ -1,6 +1,6 @@
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional, Protocol
+from datetime import UTC, datetime
+from typing import Any, Protocol
 from typing import cast as typing_cast
 
 from sqlalchemy.orm import Session
@@ -24,10 +24,10 @@ def db_log_and_broadcast(
     msg: str,
     connection_manager: ConnectionBroadcaster,
     level: str = "default",
-    epoch: Optional[int] = None,
+    epoch: int | None = None,
 ) -> None:
     """Persist a log message to the DB and broadcast it over WebSocket."""
-    timestamp = datetime.now(tz=timezone.utc).strftime("%H:%M:%S")
+    timestamp = datetime.now(tz=UTC).strftime("%H:%M:%S")
     log_entry = LogMessage(msg=msg, type=level, epoch=epoch)
     run = db.query(Run).filter(Run.run_id == run_id).first()
     if run:
@@ -44,10 +44,10 @@ async def log_and_broadcast(
     msg: str,
     connection_manager: ConnectionBroadcaster,
     level: str = "default",
-    epoch: Optional[int] = None,
+    epoch: int | None = None,
 ) -> None:
     """Broadcast a log message via WebSocket without persisting to DB."""
-    timestamp = datetime.now(tz=timezone.utc).strftime("%H:%M:%S")
+    timestamp = datetime.now(tz=UTC).strftime("%H:%M:%S")
     log_entry = LogMessage(msg=msg, type=level, epoch=epoch)
     await connection_manager.broadcast(TelemetryMessage(type="log", data=log_entry))
     logger.info("[%s] %s", timestamp, msg)

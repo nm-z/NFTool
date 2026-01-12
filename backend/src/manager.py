@@ -10,17 +10,16 @@ import asyncio
 import json
 import logging
 import os
-import sys
-from typing import Any, Dict, List, Optional
 import subprocess
+import sys
+from typing import Any, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config import LOGS_DIR
 from src.database.database import SessionLocal
-from src.database.models import Run
-from src.database.models import ModelCheckpoint
+from src.database.models import ModelCheckpoint, Run
 from src.schemas.websocket import (
     HardwareStats,
     LogMessage,
@@ -50,13 +49,14 @@ class ConnectionManager:
     - Poll the DB for new metrics/logs/status/checkpoints for the active run
       and forward any newly committed items to connected clients.
     """
+
     def __init__(self):
         # Don't inject bogus/placeholder stats. Only store obtained or actually measured stats.
-        self.clients: List[WebSocket] = []
+        self.clients: list[WebSocket] = []
         self.client_lock = asyncio.Lock()
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.loop: asyncio.AbstractEventLoop | None = None
         # Consolidate tracking maps to reduce instance attribute count.
-        self._tracking: Dict[str, dict] = {
+        self._tracking: dict[str, Any] = {
             "metrics_index": {},
             "logs_index": {},
             "status": {},
@@ -75,12 +75,14 @@ class ConnectionManager:
             subprocess.CalledProcessError,
             subprocess.TimeoutExpired,
         ) as exc:
-            logger.error("Hardware probe failed during startup; aborting.", exc_info=True)
+            logger.error(
+                "Hardware probe failed during startup; aborting.", exc_info=True
+            )
             raise RuntimeError("Hardware probe failed during startup") from exc
 
         # Require actual measured values; do not fabricate defaults.
         self._tracking["hardware_stats"] = {**(gpu_stats or {}), **(system_stats or {})}
-        self.active_run_id: Optional[str] = None
+        self.active_run_id: str | None = None
         # Track how many metrics/logs have been forwarded for a given run so
         # we only broadcast new items observed in the DB (useful when the
         # training worker runs in a separate process).
@@ -220,7 +222,9 @@ class ConnectionManager:
                 "val_loss": None,
             }
             try:
-                ck_tm = TelemetryMessage(type="metrics", data=MetricData(**metric_point))
+                ck_tm = TelemetryMessage(
+                    type="metrics", data=MetricData(**metric_point)
+                )
                 await self.broadcast(ck_tm)
             except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                 logger.exception("Failed to forward checkpoint-based metric: %s", exc)
@@ -236,7 +240,13 @@ class ConnectionManager:
             try:
                 m_tm = TelemetryMessage(type="metrics", data=MetricData(**m))
                 await self.broadcast(m_tm)
-            except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+            except (
+                ValueError,
+                TypeError,
+                WebSocketDisconnect,
+                OSError,
+                RuntimeError,
+            ) as exc:
                 logger.exception("Failed to forward metric point: %s", exc)
         if self.active_run_id:
             self._tracking["metrics_index"][self.active_run_id] = len(metrics)
@@ -250,7 +260,13 @@ class ConnectionManager:
             try:
                 l_tm = TelemetryMessage(type="log", data=LogMessage(**lg))
                 await self.broadcast(l_tm)
-            except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
+            except (
+                ValueError,
+                TypeError,
+                WebSocketDisconnect,
+                OSError,
+                RuntimeError,
+            ) as exc:
                 logger.exception("Failed to forward log entry: %s", exc)
         if self.active_run_id:
             self._tracking["logs_index"][self.active_run_id] = len(logs)
@@ -263,6 +279,7 @@ class ConnectionManager:
         - DB polling for the active run to forward new metrics/logs/status/checkpoints.
         """
         from src.services.queue_instance import job_queue  # local import to avoid cycle
+
         while True:
             if not self.clients:
                 # No clients connected — sleep longer to reduce DB/hardware pressure.
@@ -310,7 +327,9 @@ class ConnectionManager:
                     cfg = getattr(run, "config", {}) or {}
                     cfg_trials = 0
                     try:
-                        cfg_trials = int(cfg.get("optuna_trials") or cfg.get("trials") or 0)
+                        cfg_trials = int(
+                            cfg.get("optuna_trials") or cfg.get("trials") or 0
+                        )
                     except (TypeError, ValueError):
                         cfg_trials = 0
                     if total_trials <= 0 and cfg_trials > 0:
@@ -324,7 +343,9 @@ class ConnectionManager:
                         "run_id": getattr(run, "run_id", None),
                         "current_trial": current_trial,
                         "total_trials": total_trials,
-                        "result": {"best_r2": float(getattr(run, "best_r2", 0.0) or 0.0)},
+                        "result": {
+                            "best_r2": float(getattr(run, "best_r2", 0.0) or 0.0)
+                        },
                     }
                     last_status = self._tracking["status"].get(self.active_run_id)
                     if last_status != status_snapshot:
@@ -341,7 +362,9 @@ class ConnectionManager:
                             .order_by(ModelCheckpoint.id)
                             .all()
                         )
-                        last_ck = self._tracking["checkpoint_id"].get(self.active_run_id, 0)
+                        last_ck = self._tracking["checkpoint_id"].get(
+                            self.active_run_id, 0
+                        )
                         for ck in ckpts:
                             if int(getattr(ck, "id", 0)) <= last_ck:
                                 continue
@@ -379,7 +402,9 @@ class ConnectionManager:
                             last_ck = max(last_ck, int(getattr(ck, "id", last_ck)))
                         self._tracking["checkpoint_id"][self.active_run_id] = last_ck
                     except SQLAlchemyError:
-                        logger.exception("Failed to query/forward ModelCheckpoint metrics")
+                        logger.exception(
+                            "Failed to query/forward ModelCheckpoint metrics"
+                        )
                 finally:
                     if db is not None:
                         try:
@@ -388,7 +413,7 @@ class ConnectionManager:
                             logger.debug("DB close failed: %s", exc)
             await asyncio.sleep(interval)
 
-    async def connect(self, websocket: WebSocket, client_api_key: Optional[str] = None):
+    async def connect(self, websocket: WebSocket, client_api_key: str | None = None):
         """Accept and register an incoming websocket connection."""
         # Accept without subprotocol when no API key is provided to avoid typing issues.
         if client_api_key:
@@ -417,7 +442,8 @@ class ConnectionManager:
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     # Mark client as disconnected; cleanup after attempting all sends
                     logger.exception(
-                        "Error sending websocket message to client; scheduling removal: %s", exc
+                        "Error sending websocket message to client; scheduling removal: %s",
+                        exc,
                     )
                     disconnected.append(client)
             for client in disconnected:
@@ -490,7 +516,9 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                     total_trials = int(getattr(latest_run, "optuna_trials", 0) or 0)
                     cfg = getattr(latest_run, "config", {}) or {}
                     try:
-                        cfg_trials = int(cfg.get("optuna_trials") or cfg.get("trials") or 0)
+                        cfg_trials = int(
+                            cfg.get("optuna_trials") or cfg.get("trials") or 0
+                        )
                     except (TypeError, ValueError):
                         cfg_trials = 0
                     if total_trials <= 0 and cfg_trials > 0:
@@ -504,12 +532,19 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                         "run_id": run_id,
                         "current_trial": current_trial,
                         "total_trials": total_trials,
-                        "result": {"best_r2": float(getattr(latest_run, "best_r2", 0.0) or 0.0)},
+                        "result": {
+                            "best_r2": float(getattr(latest_run, "best_r2", 0.0) or 0.0)
+                        },
                     }
-                    status_msg = TelemetryMessage(type="status", data=status_snapshot).model_dump_json()
+                    status_msg = TelemetryMessage(
+                        type="status", data=status_snapshot
+                    ).model_dump_json()
                     await websocket.send_text(status_msg)
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
-                    logger.exception("Failed to send initial status snapshot to websocket client: %s", exc)
+                    logger.exception(
+                        "Failed to send initial status snapshot to websocket client: %s",
+                        exc,
+                    )
 
                 # Send persisted metrics and logs (one message per item) so client can render
                 # the full history immediately. Mark indexes so the manager doesn't forward
@@ -517,28 +552,54 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                 try:
                     for m in metrics:
                         try:
-                            metric_msg = TelemetryMessage(type="metrics", data=MetricData(**m)).model_dump_json()
+                            metric_msg = TelemetryMessage(
+                                type="metrics", data=MetricData(**m)
+                            ).model_dump_json()
                             await websocket.send_text(metric_msg)
-                        except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
-                            logger.exception("Failed to send persisted metric to client: %s", exc)
+                        except (
+                            ValueError,
+                            TypeError,
+                            WebSocketDisconnect,
+                            OSError,
+                            RuntimeError,
+                        ) as exc:
+                            logger.exception(
+                                "Failed to send persisted metric to client: %s", exc
+                            )
                     if run_id:
                         manager._tracking["metrics_index"][run_id] = len(metrics)
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
-                    logger.exception("Failed to send persisted metrics to websocket client: %s", exc)
+                    logger.exception(
+                        "Failed to send persisted metrics to websocket client: %s", exc
+                    )
 
                 try:
                     for lg in logs:
                         try:
-                            log_msg = TelemetryMessage(type="log", data=LogMessage(**lg)).model_dump_json()
+                            log_msg = TelemetryMessage(
+                                type="log", data=LogMessage(**lg)
+                            ).model_dump_json()
                             await websocket.send_text(log_msg)
-                        except (ValueError, TypeError, WebSocketDisconnect, OSError, RuntimeError) as exc:
-                            logger.exception("Failed to send persisted log to client: %s", exc)
+                        except (
+                            ValueError,
+                            TypeError,
+                            WebSocketDisconnect,
+                            OSError,
+                            RuntimeError,
+                        ) as exc:
+                            logger.exception(
+                                "Failed to send persisted log to client: %s", exc
+                            )
                     if run_id:
                         manager._tracking["logs_index"][run_id] = len(logs)
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
-                    logger.exception("Failed to send persisted logs to websocket client: %s", exc)
+                    logger.exception(
+                        "Failed to send persisted logs to websocket client: %s", exc
+                    )
         except (SQLAlchemyError, WebSocketDisconnect, OSError, RuntimeError) as exc:
-            logger.exception("Failed to catch up client with persisted run data: %s", exc)
+            logger.exception(
+                "Failed to catch up client with persisted run data: %s", exc
+            )
 
         while True:
             data = await websocket.receive_text()
