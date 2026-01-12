@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains-mono);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 :root {
@@ -35,10 +35,12 @@
   }
   body {
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased font-sans text-[13px] leading-tight selection:bg-[#3b82f6]/20;
+    text-rendering: auto;
+    letter-spacing: normal;
   }
   h1, h2, h3, h4 {
     @apply font-medium text-[hsl(var(--foreground-active))];
-}
+  }
 }
 
 /* Scrollbar: Near invisible utilitarian */
@@ -51,7 +53,7 @@
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #18181b;
   border-radius: 10px;
-  }
+}
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #27272a;
 }

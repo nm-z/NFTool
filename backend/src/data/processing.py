@@ -1,6 +1,26 @@
 import torch
 import pandas as pd
 import numpy as np
+import os
+from sklearn.linear_model import RidgeCV
+
+def load_dataset(file_path):
+    """
+    Loads dataset from CSV, Parquet, or JSON.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == '.csv':
+        # Many datasets in this project don't have headers
+        return pd.read_csv(file_path, header=None)
+    elif ext == '.parquet':
+        return pd.read_parquet(file_path)
+    elif ext == '.json':
+        return pd.read_json(file_path)
+    else:
+        raise ValueError(f"Unsupported file format: {ext}")
 
 def preprocess_for_cnn(X_np):
     X = torch.tensor(X_np, dtype=torch.float32)
@@ -19,44 +39,29 @@ def to_2d_numpy(tensor):
 
 def compute_dataset_snr_from_files(predictor_file, target_file, ridge_eps: float = 1e-1):
     """
-    Computes a linear SNR estimate. 
-    NOTE: In high-dimensional settings (N < P), this will overfit 
-    and report a very high SNR unless strong regularization is used.
+    Computes a linear SNR estimate using RidgeCV for robust regularization.
+    NOTE: In high-dimensional settings (N < P), even RidgeCV may report 
+    optimistic SNR.
     """
     try:
-        # Fixed: Use header=None to match training data loading
-        df_X = pd.read_csv(predictor_file, header=None)
-        df_y = pd.read_csv(target_file, header=None).dropna()
+        df_X = load_dataset(predictor_file)
+        df_y = load_dataset(target_file).dropna()
         
         min_len = min(len(df_X), len(df_y))
         X = df_X.iloc[:min_len].values
         y = df_y.iloc[:min_len].values.flatten()
         
-        if len(X) < 2:
+        if len(X) < 5: # Need more samples for CV
             return 0.0, -99.0
 
-        X_centered = X - X.mean(axis=0)
-        y_centered = y - y.mean()
-
-        # Use Ridge regression instead of pinv to handle N < P more gracefully
-        # XtX is P x P, which is 3204x3204.
-        d = X_centered.shape[1]
-        n = X_centered.shape[0]
-        
-        if n < d:
-            # Dual form for N < P: w = X.T @ (X @ X.T + eps*I)^-1 @ y
-            # (X @ X.T) is N x N (108x108), much faster.
-            K = X_centered @ X_centered.T
-            w_dual = np.linalg.solve(K + ridge_eps * np.eye(n), y_centered)
-            preds = K @ w_dual + y.mean()
-        else:
-            XtX = X_centered.T @ X_centered
-            Xty = X_centered.T @ y_centered
-            XtX_reg = XtX + ridge_eps * np.eye(d)
-            w = np.linalg.solve(XtX_reg, Xty)
-            preds = X_centered @ w + y.mean()
+        # Automated Ridge with Leave-One-Out Cross-Validation
+        alphas = np.logspace(-3, 3, 10)
+        model = RidgeCV(alphas=alphas)
+        model.fit(X, y)
+        preds = model.predict(X)
 
         signal_power = np.var(y)
+        # Using residual sum of squares for noise estimate
         noise_power  = np.mean((y - preds) ** 2)
         
         # Avoid division by zero
@@ -66,5 +71,5 @@ def compute_dataset_snr_from_files(predictor_file, target_file, ridge_eps: float
         return snr, snr_db
 
     except Exception as e:
-        print(f"❌ Error computing SNR: {e}")
+        print(f"Error computing SNR: {e}")
         return 0.0, -99.0

@@ -12,7 +12,8 @@ from src.models.architectures import model_factory
 from src.data.processing import preprocess_for_cnn
 
 def train_model(X_train, y_train, X_val, y_val, input_size, config, device, patience, 
-                num_epochs=200, batch_size=32, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
+                num_epochs=200, batch_size=32, gpu_throttle_sleep=0.1, check_stop=None, 
+                on_epoch_end=None, checkpoint_callback=None):
     if config is None:
         return None, float("inf"), {'train': [], 'val': [], 'r2': [], 'mae': []}
     
@@ -22,7 +23,6 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
     criterion = nn.MSELoss()
     
     train_dataset = TensorDataset(X_train, y_train)
-    # Adjust batch size for small datasets
     actual_batch_size = min(batch_size, len(X_train))
     train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True)
     
@@ -74,6 +74,8 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
             best_val_loss = val_loss
             best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             counter = 0
+            if checkpoint_callback:
+                checkpoint_callback(model, val_loss, r2, mae)
         else:
             counter += 1
             if counter >= patience: break
@@ -83,7 +85,8 @@ def train_model(X_train, y_train, X_val, y_val, input_size, config, device, pati
     return model, best_val_loss, history
 
 def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, patience, 
-                   num_epochs=200, batch_size=16, gpu_throttle_sleep=0.1, check_stop=None, on_epoch_end=None):
+                   num_epochs=200, batch_size=16, gpu_throttle_sleep=0.1, check_stop=None, 
+                   on_epoch_end=None, checkpoint_callback=None):
     X_train = preprocess_for_cnn(X_train_np).to(device)
     X_val = preprocess_for_cnn(X_val_np).to(device)
     y_train = torch.tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
@@ -91,12 +94,10 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
 
     model = model_factory("CNN", X_train.shape[2], config, device)
     optimizer_class = getattr(optim, config['optimizer'])
-    # Add weight decay for regularization
     optimizer = optimizer_class(model.parameters(), lr=config['lr'], weight_decay=1e-4)
     criterion = nn.MSELoss()
 
     train_dataset = TensorDataset(X_train, y_train)
-    # Use smaller batches for 108 samples to get more updates per epoch
     actual_batch_size = min(batch_size, len(X_train))
     train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True)
 
@@ -148,6 +149,8 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
             best_val_loss = val_loss
             best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             counter = 0
+            if checkpoint_callback:
+                checkpoint_callback(model, val_loss, r2, mae)
         else:
             counter += 1
             if counter >= patience: break
@@ -157,7 +160,7 @@ def train_cnn_model(X_train_np, y_train_np, X_val_np, y_val_np, config, device, 
     return model, best_val_loss, history
 
 class Objective:
-    def __init__(self, model_choice, X_train, y_train, X_val, y_val, device, patience, params):
+    def __init__(self, model_choice, X_train, y_train, X_val, y_val, device, patience, params, on_checkpoint=None):
         self.model_choice = model_choice
         self.X_train = X_train
         self.y_train = y_train
@@ -166,6 +169,7 @@ class Objective:
         self.device = device
         self.patience = patience
         self.params = params
+        self.on_checkpoint = on_checkpoint
 
     def __call__(self, trial):
         if self.params.get('check_stop') and self.params['check_stop']():
@@ -176,6 +180,10 @@ class Objective:
         lr = trial.suggest_float("lr", self.params['lr_min'], self.params['lr_max'], log=True)
         dropout = trial.suggest_float("dropout", self.params['drop_min'], self.params['drop_max'])
         
+        def local_checkpoint(model, loss, r2, mae):
+            if self.on_checkpoint:
+                self.on_checkpoint(trial.number, model, loss, r2, mae)
+
         if self.model_choice == "NN":
             n_layers = trial.suggest_int("num_layers", self.params['n_layers_min'], self.params['n_layers_max'])
             l_size = trial.suggest_int("layer_size", self.params['l_size_min'], self.params['l_size_max'])
@@ -185,21 +193,30 @@ class Objective:
                 torch.tensor(self.y_train, dtype=torch.float32).unsqueeze(1).to(self.device),
                 torch.tensor(self.X_val, dtype=torch.float32).to(self.device),
                 torch.tensor(self.y_val, dtype=torch.float32).unsqueeze(1).to(self.device),
-                self.X_train.shape[1], config, self.device, self.patience
+                self.X_train.shape[1], config, self.device, self.patience,
+                num_epochs=self.params.get('max_epochs', 200),
+                gpu_throttle_sleep=self.params.get('gpu_throttle_sleep', 0.1),
+                on_epoch_end=self.params.get('on_epoch_end'),
+                checkpoint_callback=local_checkpoint
             )
         else:
-            n_conv = trial.suggest_int("num_conv_blocks", 1, 5)
+            n_conv = trial.suggest_int("num_conv_blocks", self.params.get('conv_blocks_min', 1), self.params.get('conv_blocks_max', 5))
             base_filters = trial.suggest_int("base_filters", self.params['l_size_min'], self.params['l_size_max'])
             h_dim = trial.suggest_int("hidden_dim", int(self.params['h_dim_min']), int(self.params['h_dim_max']))
             
-            # Use dynamic filter cap if provided in params, otherwise default to a high value
             cap_min = self.params.get('cnn_filter_cap_min', 512)
             cap_max = self.params.get('cnn_filter_cap_max', 512)
             current_cap = trial.suggest_int("cnn_filter_cap", cap_min, cap_max)
             
-            conv_layers = [{'out_channels': min(base_filters * (2**i), current_cap), 'kernel': 3, 'pool': 2} for i in range(n_conv)]
+            conv_layers = [{'out_channels': min(base_filters * (2**i), current_cap), 'kernel': self.params.get('kernel_size', 3), 'pool': 2} for i in range(n_conv)]
             config = {'conv_layers': conv_layers, 'hidden_dim': h_dim, 'dropout': dropout, 'lr': lr, 'optimizer': optimizer}
-            _, loss, history = train_cnn_model(self.X_train, self.y_train, self.X_val, self.y_val, config, self.device, self.patience)
+            _, loss, history = train_cnn_model(
+                self.X_train, self.y_train, self.X_val, self.y_val, config, self.device, self.patience,
+                num_epochs=self.params.get('max_epochs', 200),
+                gpu_throttle_sleep=self.params.get('gpu_throttle_sleep', 0.1),
+                on_epoch_end=self.params.get('on_epoch_end'),
+                checkpoint_callback=local_checkpoint
+            )
         
         if history['r2']:
             trial.set_user_attr("r2", history['r2'][-1])

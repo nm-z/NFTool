@@ -1,6 +1,30 @@
 import torch
 import torch.nn as nn
 
+class ResidualBlock1D(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
+        super().__init__()
+        padding = kernel_size // 2
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU()
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, stride=1, padding=padding)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+        
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride),
+                nn.BatchNorm1d(out_channels)
+            )
+
+    def forward(self, x):
+        residual = self.shortcut(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += residual
+        return self.relu(out)
+
 class RegressionNet(nn.Module):
     def __init__(self, input_size, layers, dropout=0.0):
         super().__init__()
@@ -43,16 +67,13 @@ class CNNRegressionNet(nn.Module):
         for layer_cfg in conv_layers:
             out_channels = layer_cfg['out_channels']
             kernel = layer_cfg['kernel']
-            padding = kernel // 2
+            stride = layer_cfg.get('stride', 1)
             
-            layers.append(nn.Conv1d(in_channels, out_channels, kernel_size=kernel, padding=padding))
-            layers.append(nn.BatchNorm1d(out_channels))
-            layers.append(nn.ReLU())
+            layers.append(ResidualBlock1D(in_channels, out_channels, kernel_size=kernel, stride=stride))
             if layer_cfg.get('pool'):
                 layers.append(nn.MaxPool1d(layer_cfg['pool']))
             in_channels = out_channels
 
-        # Combine Average and Max pooling for richer features
         self.cnn = nn.Sequential(*layers)
         self.avg_pool = nn.AdaptiveAvgPool1d(1)
         self.max_pool = nn.AdaptiveMaxPool1d(1)

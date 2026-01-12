@@ -8,7 +8,7 @@ export function SummaryCard({ icon: Icon, label, value, subValue }: { icon: Luci
         <Icon size={20} />
       </div>
       <div>
-        <div className="text-[10px] font-bold text-[#52525b] uppercase tracking-wider">{label}</div>
+        <div className="text-[10px] font-bold text-[#52525b] uppercase">{label}</div>
         <div className="text-[16px] font-bold text-[hsl(var(--foreground-active))] leading-tight mt-0.5">{value}</div>
         <div className="text-[10px] text-[#52525b] font-mono mt-0.5">{subValue}</div>
       </div>
@@ -37,7 +37,7 @@ export function PlotCard({ title, src }: { title: string, src: string }) {
   return (
     <div className="border border-[hsl(var(--border))] rounded-xl overflow-hidden bg-[hsl(var(--panel))]/50 flex flex-col">
       <div className="px-4 py-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--panel))]">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#52525b]">{title}</span>
+        <span className="text-[10px] font-bold uppercase text-[#52525b]">{title}</span>
       </div>
       <div className="flex-1 p-2 flex items-center justify-center min-h-[300px]">
         <img 

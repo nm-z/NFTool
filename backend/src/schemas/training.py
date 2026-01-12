@@ -3,7 +3,10 @@ from typing import List, Dict, Any, Optional
 import os
 from pathlib import Path
 from fastapi import HTTPException
+import logging
 from src.config import REPO_ROOT, WORKSPACE_DIR
+
+logger = logging.getLogger("nftool")
 
 def safe_path(relative_path: str):
     """Sanitize and validate path to prevent directory traversal"""
@@ -14,10 +17,12 @@ def safe_path(relative_path: str):
         workspace_root = Path(WORKSPACE_DIR).resolve()
         data_root = (base_path / "data").resolve()
         
+        # logger.info(f"safe_path validation: {target_path} (base: {base_path})")
+        
         if target_path.is_relative_to(workspace_root) or target_path.is_relative_to(data_root):
             return str(target_path)
             
-        raise HTTPException(status_code=403, detail="Access denied: Path outside allowed directories")
+        raise HTTPException(status_code=403, detail=f"Access denied: {target_path} is outside allowed directories (Data: {data_root}, Workspace: {workspace_root})")
     except ValueError:
         raise HTTPException(status_code=403, detail="Invalid path structure")
 

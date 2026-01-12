@@ -14,3 +14,5 @@ websockets
 aiofiles
 jinja2
 psutil
+kaleido
+matplotlib

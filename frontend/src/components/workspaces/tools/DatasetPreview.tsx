@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { FolderOpen, AlertCircle } from "lucide-react";
+import { FolderOpen, AlertCircle, Database, LayoutGrid, Info } from "lucide-react";
+import { SummaryCard } from "../../common/Cards";
 
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
@@ -41,7 +42,7 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
   }, [filePath]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center gap-3 bg-[hsl(var(--panel))] p-3 rounded-lg border border-[hsl(var(--border))]">
         <FolderOpen size={16} className="text-[#3b82f6]" />
         <input
@@ -53,22 +54,34 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
         />
         <button
           onClick={loadPreview}
+          data-testid="btn-preview-dataset"
           disabled={loading}
           className="px-4 py-1.5 bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/30 hover:bg-[#3b82f6] hover:text-[hsl(var(--foreground-active))] text-[11px] font-bold rounded transition-all disabled:opacity-50"
         >
           {loading ? "Loading..." : "Preview"}
         </button>
       </div>
+
+      {previewData && (
+        <div className="grid grid-cols-4 gap-4">
+          <SummaryCard icon={Database} label="Total Samples" value={previewData.total_rows.toLocaleString()} subValue="Row Count" />
+          <SummaryCard icon={LayoutGrid} label="Features" value={previewData.shape[1].toString()} subValue="Column Count" />
+          <SummaryCard icon={Info} label="Missing Values" value={previewData.stats.missing.toString()} subValue="Data Integrity" />
+          <SummaryCard icon={LayoutGrid} label="Memory Size" value={`${((previewData.total_rows * previewData.shape[1] * 8) / 1024 / 1024).toFixed(2)} MB`} subValue="Estimated Heap" />
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-3 text-red-400 text-[11px] font-medium">
           <AlertCircle size={14} />
           <span>{error}</span>
         </div>
       )}
+
       {previewData && (
         <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden bg-[hsl(var(--panel))]/30">
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse" suppressHydrationWarning>
               <thead className="bg-[hsl(var(--panel))] text-[10px] text-[#52525b] uppercase font-bold">
                 <tr>
                   {previewData.headers.map((h: string, i: number) => (

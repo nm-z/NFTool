@@ -1,16 +1,20 @@
 import React, { useState } from "react";
-import { FastForward, Check, AlertCircle } from "lucide-react";
+import { FastForward, Check, AlertCircle, HardDrive } from "lucide-react";
+import { useTrainingStore } from "@/store/useTrainingStore";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export function InferencePlayground({ loadedPath }: { loadedPath: string | null }) {
+  const { isAdvancedMode, setLoadedModelPath } = useTrainingStore();
   const [features, setFeatures] = useState("");
   const [prediction, setPrediction] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [manualPath, setManualPath] = useState(loadedPath || "");
 
   const runInference = async () => {
-    if (!loadedPath || !features) {
+    const targetPath = isAdvancedMode ? manualPath : loadedPath;
+    if (!targetPath || !features) {
       setError("Please load model weights first");
       return;
     }
@@ -18,10 +22,15 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
     setError("");
     try {
       const featureArray = features.split(",").map(f => parseFloat(f.trim()));
+      const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
+      
       const res = await fetch(`${API_URL}/inference`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model_path: loadedPath, features: featureArray })
+        headers: { 
+          "Content-Type": "application/json",
+          "X-API-Key": API_KEY
+        },
+        body: JSON.stringify({ model_path: targetPath, features: featureArray })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -38,18 +47,18 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
 
   return (
     <div className="space-y-6">
-      <div className="bg-[hsl(var(--panel))]/50 border border-[hsl(var(--border))] rounded-xl p-6 space-y-6">
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[#3b82f6]/10 flex items-center justify-center text-[#3b82f6]">
+            <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
               <FastForward size={18} />
             </div>
             <div>
-              <h3 className="text-[12px] font-bold text-[hsl(var(--foreground-active))]">Prediction Engine</h3>
-              <p className="text-[10px] text-[#52525b]">Execute single-row inference on active weights</p>
+              <h3 className="text-[12px] font-bold text-white">Prediction Engine</h3>
+              <p className="text-[10px] text-zinc-500">Execute single-row inference on active weights</p>
             </div>
           </div>
-          {loadedPath ? (
+          {(isAdvancedMode ? manualPath : loadedPath) ? (
             <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 border border-green-500/30 rounded text-[10px] font-bold text-green-400 uppercase">
               <Check size={12} /> Live
             </div>
@@ -60,21 +69,47 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
           )}
         </div>
 
+        {isAdvancedMode && (
+          <div className="space-y-2 border-y border-zinc-800/50 py-4">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+              <HardDrive size={12} /> Model Path (Advanced/Automation)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={manualPath}
+                onChange={(e) => setManualPath(e.target.value)}
+                placeholder="e.g. workspace/runs/reports/PASS_.../best_model.pt"
+                className="flex-1 bg-black border border-zinc-800 rounded px-3 py-1.5 text-[11px] text-blue-400 font-mono focus:outline-none focus:border-blue-500"
+                data-testid="input-manual-model-path"
+              />
+              <button 
+                onClick={() => setLoadedModelPath(manualPath)}
+                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold rounded transition-colors"
+              >
+                SET
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-[#52525b] uppercase tracking-widest">Input Features (CSV Vector)</label>
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Input Features (CSV Vector)</label>
             <textarea
               value={features}
               onChange={(e) => setFeatures(e.target.value)}
               placeholder="Enter comma-separated features (e.g., 0.12, 0.45, -0.11...)"
               rows={4}
-              className="w-full bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-lg px-4 py-3 text-[12px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none focus:border-[#3b82f6] placeholder-[#3f3f46] transition-all"
+              className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-[12px] text-white font-mono focus:outline-none focus:border-blue-500 placeholder-zinc-700 transition-all"
+              data-testid="textarea-inference-features"
             />
           </div>
           <button
             onClick={runInference}
-            disabled={loading || !loadedPath}
-            className="w-full py-2.5 bg-[#3b82f6] hover:bg-[#2563eb] text-[hsl(var(--foreground-active))] text-[11px] font-bold rounded-lg transition-all disabled:opacity-50 disabled:grayscale shadow-lg shadow-[#3b82f6]/10"
+            data-testid="btn-execute-inference"
+            disabled={loading || !(isAdvancedMode ? manualPath : loadedPath)}
+            className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-bold rounded-lg transition-all disabled:opacity-50 disabled:grayscale shadow-lg shadow-blue-500/10"
           >
             {loading ? "COMPUTING..." : "EXECUTE INFERENCE"}
           </button>

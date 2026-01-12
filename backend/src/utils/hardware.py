@@ -50,9 +50,9 @@ class HardwareMonitor:
                     card = next((k for k in target_keys if k in data), None)
                     if not card and len(data) > 0: card = list(data.keys())[0]
                     if card:
-                        use_val = data[card].get("GPU use (%)") or data[card].get("GPU use") or 0
+                        use_val = data[card].get("GPU use (%)") or data[card].get("GPU use") or data[card].get("GPU utilization (%)") or data[card].get("GPU Utilization") or 0
                         gpu_stats["gpu_use_percent"] = int(float(str(use_val).strip('%')))
-                        temp = data[card].get("Temperature (Sensor edge) (C)") or data[card].get("Temperature (C)") or 0
+                        temp = data[card].get("Temperature (Sensor edge) (C)") or data[card].get("Temperature (C)") or data[card].get("Temperature (Sensor junction) (C)") or 0
                         gpu_stats["gpu_temp_c"] = int(float(temp))
 
             if res_mem.returncode == 0:

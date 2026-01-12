@@ -40,6 +40,7 @@ export function ControlInput({ label, value, onChange, min, max, step = 1, toolt
         <input 
           type="text" 
           value={value} 
+          data-testid={`input-${label.toLowerCase().replace(/\s+/g, '-')}`}
           onChange={(e) => onChange?.(e.target.value)} 
           className="bg-[#1e1e20] border border-[#2e2e30] rounded px-2 py-1 text-right text-[11px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none focus:border-[#3b82f6]/50 w-20 transition-colors" 
         />
@@ -68,7 +69,7 @@ export function ControlInput({ label, value, onChange, min, max, step = 1, toolt
 }
 
 export function RangeControl({ label, value, onChange, min, max, step = 1, tooltip }: { label: string, value: string, onChange: (v: string) => void, min: number, max: number, step?: number, tooltip?: string }) {
-  const parts = value.split("→").map(p => p.trim());
+  const parts = typeof value === 'string' ? value.split("→").map(p => p.trim()) : [];
   const vMin = parseFloat(parts[0]) || min;
   const vMax = parseFloat(parts[1]) || max;
   const [showHint, setShowHint] = useState(false);
@@ -93,11 +94,13 @@ export function RangeControl({ label, value, onChange, min, max, step = 1, toolt
         <div className="flex items-center gap-1">
           <input 
             type="text" value={vMin} onChange={(e) => updateMin(e.target.value)}
+            data-testid={`range-min-${label.toLowerCase().replace(/\s+/g, '-')}`}
             className="bg-[#1e1e20] border border-[#2e2e30] rounded px-2 py-1 text-center text-[10px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none w-14"
           />
           <span className="text-[#3f3f46] text-[10px]">→</span>
           <input 
             type="text" value={vMax} onChange={(e) => updateMax(e.target.value)}
+            data-testid={`range-max-${label.toLowerCase().replace(/\s+/g, '-')}`}
             className="bg-[#1e1e20] border border-[#2e2e30] rounded px-2 py-1 text-center text-[10px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none w-14"
           />
         </div>
