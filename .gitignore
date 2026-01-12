@@ -18,4 +18,4 @@ frontend/node_modules/
 
 # hypothesis
 .hypothesis/constants
-.hypothesis/unicode_data/15.0.0/codec-utf-8.json.gz
+.hypothesis/unicode_data/
