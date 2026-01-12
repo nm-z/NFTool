@@ -15,7 +15,7 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
-    error: null
+    error: null,
   };
 
   public static getDerivedStateFromError(error: Error): State {
@@ -36,8 +36,12 @@ export class ErrorBoundary extends Component<Props, State> {
                 <AlertCircle size={28} />
               </div>
               <div>
-                <h1 className="text-lg font-bold uppercase tracking-tight">System Exception</h1>
-                <p className="text-[11px] text-[#52525b] font-mono">UI_CRASH_PROTECTION_ACTIVE</p>
+                <h1 className="text-lg font-bold uppercase tracking-tight">
+                  System Exception
+                </h1>
+                <p className="text-[11px] text-[#52525b] font-mono">
+                  UI_CRASH_PROTECTION_ACTIVE
+                </p>
               </div>
             </div>
 
@@ -55,8 +59,8 @@ export class ErrorBoundary extends Component<Props, State> {
               </button>
               <button
                 onClick={() => {
-                    this.setState({ hasError: false, error: null });
-                    window.location.href = '/';
+                  this.setState({ hasError: false, error: null });
+                  window.location.href = "/";
                 }}
                 className="w-full py-2.5 bg-[hsl(var(--panel-lighter))] text-[#52525b] text-[11px] font-bold rounded-lg hover:text-[hsl(var(--foreground-active))] transition-all flex items-center justify-center gap-2"
               >

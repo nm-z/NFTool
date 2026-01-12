@@ -1,0 +1,4 @@
+# file: /home/nate/Desktop/NFTool/backend/src/routers/training.py
+# hypothesis_version: 6.150.0
+
+[0.0, 200, 400, 404, 406, 422, '.pt', '.pth', '/abort', '/inference', '/load-weights', '/runs', '/train', 'CNN', 'Inference result', 'List of runs', 'Model file not found', 'Model weights file', 'N/A', 'NN', 'Training queued', 'Unknown', 'Validation error', 'aborted', 'config', 'cpu', 'cuda', 'description', 'device', 'info', 'input_size', 'mae', 'message', 'model', 'model_choice', 'model_r2', 'model_state_dict', 'path', 'pending', 'prediction', 'predictor_path', 'r2', 'run_id', 'scaler_x_path', 'scaler_y_path', 'status', 'target_path', 'uploads', 'wb']

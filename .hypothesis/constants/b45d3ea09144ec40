@@ -1,0 +1,4 @@
+# file: /home/nate/Desktop/NFTool/backend/src/training/engine.py
+# hypothesis_version: 6.150.0
+
+[0.0, 1e-05, 0.0001, 0.1, 200, 512, 'CNN', 'NN', 'base_filters', 'check_stop', 'cnn_filter_cap', 'cnn_filter_cap_max', 'cnn_filter_cap_min', 'conv_blocks_max', 'conv_blocks_min', 'conv_layers', 'drop_max', 'drop_min', 'dropout', 'gpu_throttle_sleep', 'h_dim_max', 'h_dim_min', 'hidden_dim', 'inf', 'kernel', 'kernel_size', 'l_size_max', 'l_size_min', 'layer_size', 'layers', 'lr', 'lr_max', 'lr_min', 'mae', 'max_epochs', 'minimize', 'n_layers_max', 'n_layers_min', 'np.ndarray', 'num_conv_blocks', 'num_layers', 'on_epoch_end', 'optimizer', 'optimizers', 'out_channels', 'pool', 'r2', 'train', 'val']

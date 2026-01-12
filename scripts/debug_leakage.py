@@ -30,7 +30,7 @@ def check_leakage(predictor_path, target_path):
                 leaks.append((i, corr))
                 
     if leaks:
-        print(f"FOUND POTENTIAL LEAKS (Correlation > 0.99):")
+        print("FOUND POTENTIAL LEAKS (Correlation > 0.99):")
         for idx, corr in leaks:
             print(f"  Column {idx}: corr={corr}")
     else:

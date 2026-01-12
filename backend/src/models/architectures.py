@@ -1,21 +1,26 @@
 import torch
 import torch.nn as nn
 
+
 class ResidualBlock1D(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
         super().__init__()
         padding = kernel_size // 2
-        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        self.conv1 = nn.Conv1d(
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding
+        )
         self.bn1 = nn.BatchNorm1d(out_channels)
         self.relu = nn.ReLU()
-        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, stride=1, padding=padding)
+        self.conv2 = nn.Conv1d(
+            out_channels, out_channels, kernel_size, stride=1, padding=padding
+        )
         self.bn2 = nn.BatchNorm1d(out_channels)
-        
+
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != out_channels:
             self.shortcut = nn.Sequential(
                 nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm1d(out_channels)
+                nn.BatchNorm1d(out_channels),
             )
 
     def forward(self, x):
@@ -24,6 +29,7 @@ class ResidualBlock1D(nn.Module):
         out = self.bn2(self.conv2(out))
         out += residual
         return self.relu(out)
+
 
 class RegressionNet(nn.Module):
     def __init__(self, input_size, layers, dropout=0.0):
@@ -42,6 +48,7 @@ class RegressionNet(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+
 class CNNRegressionNet(nn.Module):
     def __init__(self, freq_bins, conv_layers=None, hidden_dim=128, dropout=0.2):
         """
@@ -57,21 +64,25 @@ class CNNRegressionNet(nn.Module):
 
         if conv_layers is None:
             conv_layers = [
-                {'out_channels': 32, 'kernel': 5, 'pool': 2},
-                {'out_channels': 64, 'kernel': 3, 'pool': 2},
-                {'out_channels': 128, 'kernel': 3, 'pool': 2}
+                {"out_channels": 32, "kernel": 5, "pool": 2},
+                {"out_channels": 64, "kernel": 3, "pool": 2},
+                {"out_channels": 128, "kernel": 3, "pool": 2},
             ]
 
         layers = []
         in_channels = 1
         for layer_cfg in conv_layers:
-            out_channels = layer_cfg['out_channels']
-            kernel = layer_cfg['kernel']
-            stride = layer_cfg.get('stride', 1)
-            
-            layers.append(ResidualBlock1D(in_channels, out_channels, kernel_size=kernel, stride=stride))
-            if layer_cfg.get('pool'):
-                layers.append(nn.MaxPool1d(layer_cfg['pool']))
+            out_channels = layer_cfg["out_channels"]
+            kernel = layer_cfg["kernel"]
+            stride = layer_cfg.get("stride", 1)
+
+            layers.append(
+                ResidualBlock1D(
+                    in_channels, out_channels, kernel_size=kernel, stride=stride
+                )
+            )
+            if layer_cfg.get("pool"):
+                layers.append(nn.MaxPool1d(layer_cfg["pool"]))
             in_channels = out_channels
 
         self.cnn = nn.Sequential(*layers)
@@ -87,7 +98,7 @@ class CNNRegressionNet(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
-            nn.Linear(hidden_dim // 2, 1)
+            nn.Linear(hidden_dim // 2, 1),
         )
 
     def forward(self, x):
@@ -98,21 +109,20 @@ class CNNRegressionNet(nn.Module):
         flat = self.flatten(combined)
         return self.head(flat)
 
+
 def model_factory(model_choice, input_size, config, device):
     if model_choice == "NN":
         return RegressionNet(
-            input_size=input_size,
-            layers=config['layers'],
-            dropout=config['dropout']
+            input_size=input_size, layers=config["layers"], dropout=config["dropout"]
         ).to(device)
     elif model_choice == "CNN":
         # Frequency bins is the feature count
         freq_bins = input_size[2] if isinstance(input_size, tuple) else input_size
         return CNNRegressionNet(
             freq_bins=freq_bins,
-            conv_layers=config.get('conv_layers'),
-            hidden_dim=config.get('hidden_dim', 128),
-            dropout=config.get('dropout', 0.2)
+            conv_layers=config.get("conv_layers"),
+            hidden_dim=config.get("hidden_dim", 128),
+            dropout=config.get("dropout", 0.2),
         ).to(device)
     else:
         raise ValueError(f"Unsupported model_choice: {model_choice}")

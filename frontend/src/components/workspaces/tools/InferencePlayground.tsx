@@ -4,7 +4,11 @@ import { useTrainingStore } from "@/store/useTrainingStore";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
-export function InferencePlayground({ loadedPath }: { loadedPath: string | null }) {
+export function InferencePlayground({
+  loadedPath,
+}: {
+  loadedPath: string | null;
+}) {
   const { isAdvancedMode, setLoadedModelPath } = useTrainingStore();
   const [features, setFeatures] = useState("");
   const [prediction, setPrediction] = useState<number | null>(null);
@@ -21,16 +25,19 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
     setLoading(true);
     setError("");
     try {
-      const featureArray = features.split(",").map(f => parseFloat(f.trim()));
+      const featureArray = features.split(",").map((f) => parseFloat(f.trim()));
       const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
-      
+
       const res = await fetch(`${API_URL}/inference`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "X-API-Key": API_KEY
+          "X-API-Key": API_KEY,
         },
-        body: JSON.stringify({ model_path: targetPath, features: featureArray })
+        body: JSON.stringify({
+          model_path: targetPath,
+          features: featureArray,
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -38,8 +45,9 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
       }
       const data = await res.json();
       setPrediction(data.prediction);
-    } catch (e: any) {
-      setError(e.message || "Inference error");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg || "Inference error");
     } finally {
       setLoading(false);
     }
@@ -54,8 +62,12 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
               <FastForward size={18} />
             </div>
             <div>
-              <h3 className="text-[12px] font-bold text-white">Prediction Engine</h3>
-              <p className="text-[10px] text-zinc-500">Execute single-row inference on active weights</p>
+              <h3 className="text-[12px] font-bold text-white">
+                Prediction Engine
+              </h3>
+              <p className="text-[10px] text-zinc-500">
+                Execute single-row inference on active weights
+              </p>
             </div>
           </div>
           {(isAdvancedMode ? manualPath : loadedPath) ? (
@@ -83,7 +95,7 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
                 className="flex-1 bg-black border border-zinc-800 rounded px-3 py-1.5 text-[11px] text-blue-400 font-mono focus:outline-none focus:border-blue-500"
                 data-testid="input-manual-model-path"
               />
-              <button 
+              <button
                 onClick={() => setLoadedModelPath(manualPath)}
                 className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold rounded transition-colors"
               >
@@ -95,7 +107,9 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Input Features (CSV Vector)</label>
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              Input Features (CSV Vector)
+            </label>
             <textarea
               value={features}
               onChange={(e) => setFeatures(e.target.value)}
@@ -125,8 +139,12 @@ export function InferencePlayground({ loadedPath }: { loadedPath: string | null 
         {prediction !== null && (
           <div className="bg-[hsl(var(--panel-lighter))] border border-[hsl(var(--border-muted))] rounded-lg p-5 transition-all animate-in fade-in slide-in-from-bottom-2">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-widest">Inference Output</span>
-              <span className="text-[10px] text-[#3b82f6] font-mono">FLOAT64</span>
+              <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-widest">
+                Inference Output
+              </span>
+              <span className="text-[10px] text-[#3b82f6] font-mono">
+                FLOAT64
+              </span>
             </div>
             <div className="text-[32px] font-mono text-[#3b82f6] tracking-tighter tabular-nums leading-none">
               {prediction?.toFixed(8) || "0.00000000"}

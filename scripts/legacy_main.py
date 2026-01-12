@@ -4,14 +4,13 @@ import logging
 import argparse
 import torch
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import joblib
 
 from src.data.processing import compute_dataset_snr_from_files
-from src.training.engine import train_model, train_cnn_model, run_optimization, Objective
+from src.training.engine import run_optimization, Objective
 from src.utils.reporting import analyze_optuna_study
 
 # Configuration

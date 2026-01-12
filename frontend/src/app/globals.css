@@ -1,27 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 }
 
 :root {
   /* LM Studio Visual System: Utilitarian Zinc */
-  --background: 240 10% 3.9%;    /* zinc-950 */
-  --foreground: 240 5% 65%;      /* zinc-400 secondary */
+  --background: 240 10% 3.9%; /* zinc-950 */
+  --foreground: 240 5% 65%; /* zinc-400 secondary */
   --foreground-active: 0 0% 98%; /* zinc-50 primary */
-  
-  --panel: 240 10% 2%;           /* zinc-950+ for sidebars */
-  --panel-lighter: 240 6% 10%;   /* zinc-900 surface */
-  --border: 240 5% 12%;          /* zinc-800/900 low contrast */
-  --border-muted: 240 5% 8%;     /* even softer separator */
-  
-  --primary: 217.2 91.2% 59.8%;  /* blue-500 accent */
+
+  --panel: 240 10% 2%; /* zinc-950+ for sidebars */
+  --panel-lighter: 240 6% 10%; /* zinc-900 surface */
+  --border: 240 5% 12%; /* zinc-800/900 low contrast */
+  --border-muted: 240 5% 8%; /* even softer separator */
+
+  --primary: 217.2 91.2% 59.8%; /* blue-500 accent */
   --primary-foreground: 222.2 47.4% 11.2%;
-  
-  --input: 240 5% 8%;            /* zinc-900 inputs */
-  --radius: 8px;                 /* consistent 8px scale */
-  
+
+  --input: 240 5% 8%; /* zinc-900 inputs */
+  --radius: 8px; /* consistent 8px scale */
+
   /* Spacing Scale (LM Studio Density) */
   --space-xs: 4px;
   --space-sm: 8px;
@@ -38,7 +43,10 @@
     text-rendering: auto;
     letter-spacing: normal;
   }
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     @apply font-medium text-[hsl(var(--foreground-active))];
   }
 }
@@ -59,9 +67,15 @@
 }
 
 /* Layout Utilities */
-.pane-border-r { border-right: 1px solid var(--border); }
-.pane-border-l { border-left: 1px solid var(--border); }
-.pane-border-b { border-bottom: 1px solid var(--border); }
+.pane-border-r {
+  border-right: 1px solid var(--border);
+}
+.pane-border-l {
+  border-left: 1px solid var(--border);
+}
+.pane-border-b {
+  border-bottom: 1px solid var(--border);
+}
 
 /* Command Palette (cmdk) refinement */
 [cmdk-root] {
@@ -73,7 +87,7 @@
 [cmdk-item] {
   @apply flex items-center gap-2 px-4 py-3 text-[13px] cursor-default select-none transition-colors;
 }
-[cmdk-item][aria-selected='true'] {
+[cmdk-item][aria-selected="true"] {
   @apply bg-[#18181b] text-[#fafafa];
 }
 [cmdk-group-heading] {

@@ -11,40 +11,69 @@ import { useTrainingStore } from "@/store/useTrainingStore";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
-export function Inspector({ setError }: { setError: (err: string | null) => void }) {
+export function Inspector({
+  setError,
+}: {
+  setError: (err: string | null) => void;
+}) {
   // Config States from Store
   const {
-    modelType, setModelType,
-    seed, setSeed,
-    patience, setPatience,
-    trials, setTrials,
-    lrRange, setLrRange,
-    convBlocks, setConvBlocks,
-    kernelSize, setKernelSize,
-    layersRange, setLayersRange,
-    layerSizeRange, setLayerSizeRange,
-    dropoutRange, setDropoutRange,
-    hDimRange, setHDimRange,
-    maxEpochs, setMaxEpochs,
-    gpuThrottle, setGpuThrottle,
-    cnnFilterCapRange, setCnnFilterCapRange,
-    
+    modelType,
+    setModelType,
+    seed,
+    setSeed,
+    patience,
+    setPatience,
+    trials,
+    setTrials,
+    lrRange,
+    setLrRange,
+    convBlocks,
+    setConvBlocks,
+    kernelSize,
+    setKernelSize,
+    layersRange,
+    setLayersRange,
+    layerSizeRange,
+    setLayerSizeRange,
+    dropoutRange,
+    setDropoutRange,
+    hDimRange,
+    setHDimRange,
+    maxEpochs,
+    setMaxEpochs,
+    gpuThrottle,
+    setGpuThrottle,
+    cnnFilterCapRange,
+    setCnnFilterCapRange,
+
     // Dataset States
-    datasets, setDatasets,
-    selectedPredictor, setSelectedPredictor,
-    selectedTarget, setSelectedTarget,
+    datasets,
+    selectedPredictor,
+    setSelectedPredictor,
+    selectedTarget,
+    setSelectedTarget,
 
     // System States
     isAdvancedMode,
-    deviceChoice, setDeviceChoice,
-    gpuChoice, setGpuChoice,
-    gpuList, setGpuList,
-    hardwareStats
+    deviceChoice,
+    setDeviceChoice,
+    gpuChoice,
+    setGpuChoice,
+    gpuList,
+    setGpuList,
+    hardwareStats,
   } = useTrainingStore();
 
   return (
-    <aside className="h-full flex flex-col bg-zinc-950 border-l border-zinc-800 outline-none" tabIndex={-1}>
-      <Tabs.Root defaultValue="model" className="flex flex-col flex-1 overflow-hidden">
+    <aside
+      className="h-full flex flex-col bg-zinc-950 border-l border-zinc-800 outline-none"
+      tabIndex={-1}
+    >
+      <Tabs.Root
+        defaultValue="model"
+        className="flex flex-col flex-1 overflow-hidden"
+      >
         <div className="px-4 pt-4 shrink-0 bg-zinc-950">
           <Tabs.List className="flex border-b border-zinc-800 gap-6">
             <TabTrigger value="model" label="Model" />
@@ -54,33 +83,41 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
           <Tabs.Content value="model" className="space-y-1">
-            <Accordion.Root type="multiple" defaultValue={["dataset", "arch", "optuna"]} className="w-full">
+            <Accordion.Root
+              type="multiple"
+              defaultValue={["dataset", "arch", "optuna"]}
+              className="w-full"
+            >
               <InspectorSection value="dataset" title="Dataset Assets">
                 <div className="space-y-4 pt-2">
                   <div className="space-y-1.5">
-                    <label className="text-[9px] font-bold text-zinc-500 uppercase">Predictors (X)</label>
-                    <select 
-                      value={selectedPredictor} 
+                    <label className="text-[9px] font-bold text-zinc-500 uppercase">
+                      Predictors (X)
+                    </label>
+                    <select
+                      value={selectedPredictor}
                       onChange={(e) => setSelectedPredictor(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors"
                     >
-                      {datasets?.map((d: any) => (
+                      {datasets?.map((d: { name?: string; path?: string }) => (
                         <option key={d.path} value={d.path}>
-                          {d.name ? d.name.split('/').pop() : 'Unknown'}
+                          {d.name ? d.name.split("/").pop() : "Unknown"}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[9px] font-bold text-zinc-500 uppercase">Targets (y)</label>
-                    <select 
-                      value={selectedTarget} 
+                    <label className="text-[9px] font-bold text-zinc-500 uppercase">
+                      Targets (y)
+                    </label>
+                    <select
+                      value={selectedTarget}
                       onChange={(e) => setSelectedTarget(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors"
                     >
-                      {datasets?.map((d: any) => (
+                      {datasets?.map((d: { name?: string; path?: string }) => (
                         <option key={d.path} value={d.path}>
-                          {d.name ? d.name.split('/').pop() : 'Unknown'}
+                          {d.name ? d.name.split("/").pop() : "Unknown"}
                         </option>
                       ))}
                     </select>
@@ -93,32 +130,42 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
                   <div className="space-y-1.5 group relative">
                     <label className="text-[9px] font-bold text-zinc-500 uppercase flex items-center gap-1.5 cursor-help">
                       Base Class
-                      <Info size={10} className="text-zinc-600 group-hover:text-blue-500 transition-colors" />
+                      <Info
+                        size={10}
+                        className="text-zinc-600 group-hover:text-blue-500 transition-colors"
+                      />
                     </label>
                     <div className="grid grid-cols-2 bg-zinc-900 border border-zinc-800 rounded p-0.5">
-                      <button 
-                        onClick={() => setModelType("NN")} 
+                      <button
+                        onClick={() => setModelType("NN")}
                         className={`py-1 rounded text-[10px] font-bold transition-all ${modelType === "NN" ? "bg-zinc-800 text-white" : "text-zinc-500"}`}
                       >
                         NN
                       </button>
-                      <button 
-                        onClick={() => setModelType("CNN")} 
+                      <button
+                        onClick={() => setModelType("CNN")}
                         className={`py-1 rounded text-[10px] font-bold transition-all ${modelType === "CNN" ? "bg-zinc-800 text-white" : "text-zinc-500"}`}
                       >
                         CNN
                       </button>
                     </div>
                   </div>
-                  
-                  <ControlInput 
-                    label="Random Seed" value={seed} onChange={setSeed} 
+
+                  <ControlInput
+                    label="Random Seed"
+                    value={seed}
+                    onChange={setSeed}
                     tooltip="Sets the reproducibility of the weights initialization."
                   />
-                  
+
                   {modelType === "CNN" && (
-                    <ControlInput 
-                      label="Kernel Size" value={kernelSize} onChange={setKernelSize} min={1} max={15} step={2} 
+                    <ControlInput
+                      label="Kernel Size"
+                      value={kernelSize}
+                      onChange={setKernelSize}
+                      min={1}
+                      max={15}
+                      step={2}
                       tooltip="Defines the 'window' size for convolutional filters (typically 3, 5, or 7)."
                     />
                   )}
@@ -127,43 +174,75 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
 
               <InspectorSection value="optuna" title="Optuna Settings">
                 <div className="space-y-4 pt-2">
-                  <ControlInput 
-                    label="Trial Budget" value={trials} onChange={setTrials} min={1} max={500} 
+                  <ControlInput
+                    label="Trial Budget"
+                    value={trials}
+                    onChange={setTrials}
+                    min={1}
+                    max={500}
                     tooltip="How many different configurations Optuna should try before picking the best one."
                   />
                   {isAdvancedMode && (
-                    <RangeControl 
-                      label="LR Bounds" value={lrRange} onChange={setLrRange} min={0.00001} max={0.1} step={0.00001} 
+                    <RangeControl
+                      label="LR Bounds"
+                      value={lrRange}
+                      onChange={setLrRange}
+                      min={0.00001}
+                      max={0.1}
+                      step={0.00001}
                       tooltip="The range of 'step sizes' (learning rate) the optimizer can explore."
                     />
                   )}
-                  
+
                   {modelType === "NN" ? (
                     <>
-                      <RangeControl 
-                        label="Layers (Range)" value={layersRange} onChange={setLayersRange} min={1} max={20} 
+                      <RangeControl
+                        label="Layers (Range)"
+                        value={layersRange}
+                        onChange={setLayersRange}
+                        min={1}
+                        max={20}
                         tooltip="The minimum and maximum depth (number of hidden layers) of the network."
                       />
-                      <RangeControl 
-                        label="Layer Size (Range)" value={layerSizeRange} onChange={setLayerSizeRange} min={8} max={2048} step={8} 
+                      <RangeControl
+                        label="Layer Size (Range)"
+                        value={layerSizeRange}
+                        onChange={setLayerSizeRange}
+                        min={8}
+                        max={2048}
+                        step={8}
                         tooltip="The range of neurons in each hidden layer."
                       />
                     </>
                   ) : (
                     <>
-                      <RangeControl 
-                        label="Conv Blocks (Range)" value={convBlocks} onChange={setConvBlocks} min={1} max={10} 
+                      <RangeControl
+                        label="Conv Blocks (Range)"
+                        value={convBlocks}
+                        onChange={setConvBlocks}
+                        min={1}
+                        max={10}
                         tooltip="The range of convolutional blocks in the CNN architecture."
                       />
-                      <RangeControl 
-                        label="Hidden Dim (Range)" value={hDimRange} onChange={setHDimRange} min={8} max={1024} step={8} 
+                      <RangeControl
+                        label="Hidden Dim (Range)"
+                        value={hDimRange}
+                        onChange={setHDimRange}
+                        min={8}
+                        max={1024}
+                        step={8}
                         tooltip="The range of units in the final dense layer before output."
                       />
                     </>
                   )}
                   {isAdvancedMode && (
-                    <RangeControl 
-                      label="Dropout (Range)" value={dropoutRange} onChange={setDropoutRange} min={0.0} max={0.9} step={0.05} 
+                    <RangeControl
+                      label="Dropout (Range)"
+                      value={dropoutRange}
+                      onChange={setDropoutRange}
+                      min={0.0}
+                      max={0.9}
+                      step={0.05}
                       tooltip="The range of regularization to prevent overfitting by randomly disabling neurons."
                     />
                   )}
@@ -173,28 +252,32 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
           </Tabs.Content>
 
           <Tabs.Content value="perf" className="space-y-1">
-            <Accordion.Root type="multiple" defaultValue={["system", "hardware"]} className="w-full">
+            <Accordion.Root
+              type="multiple"
+              defaultValue={["system", "hardware"]}
+              className="w-full"
+            >
               <InspectorSection value="hardware" title="Hardware Monitoring">
                 <div className="grid grid-cols-2 gap-3 pt-2">
-                  <HardwarePanel 
-                    label="CPU Usage" 
-                    util={(hardwareStats?.cpu_percent ?? 0).toFixed(1)} 
-                    extra="System" 
+                  <HardwarePanel
+                    label="CPU Usage"
+                    util={(hardwareStats?.cpu_percent ?? 0).toFixed(1)}
+                    extra="System"
                   />
-                  <HardwarePanel 
-                    label="RAM Usage" 
-                    util={(hardwareStats?.ram_percent ?? 0).toFixed(0)} 
-                    extra={`${hardwareStats?.ram_used_gb || 0} / ${hardwareStats?.ram_total_gb || 0} GB`} 
+                  <HardwarePanel
+                    label="RAM Usage"
+                    util={(hardwareStats?.ram_percent ?? 0).toFixed(0)}
+                    extra={`${hardwareStats?.ram_used_gb || 0} / ${hardwareStats?.ram_total_gb || 0} GB`}
                   />
-                  <HardwarePanel 
-                    label="GPU Usage" 
-                    util={hardwareStats?.gpu_use_percent || 0} 
-                    extra={`Temp: ${hardwareStats?.gpu_temp_c || 0}°C`} 
+                  <HardwarePanel
+                    label="GPU Usage"
+                    util={hardwareStats?.gpu_use_percent || 0}
+                    extra={`Temp: ${hardwareStats?.gpu_temp_c || 0}°C`}
                   />
-                  <HardwarePanel 
-                    label="VRAM Usage" 
-                    util={hardwareStats?.vram_percent || 0} 
-                    extra={`${hardwareStats?.vram_used_gb || 0} / ${hardwareStats?.vram_total_gb || 0} GB`} 
+                  <HardwarePanel
+                    label="VRAM Usage"
+                    util={hardwareStats?.vram_percent || 0}
+                    extra={`${hardwareStats?.vram_used_gb || 0} / ${hardwareStats?.vram_total_gb || 0} GB`}
                   />
                 </div>
               </InspectorSection>
@@ -206,14 +289,14 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
                       Compute Device
                     </label>
                     <div className="grid grid-cols-2 bg-zinc-900 border border-zinc-800 rounded p-0.5">
-                      <button 
-                        onClick={() => setDeviceChoice("cuda")} 
+                      <button
+                        onClick={() => setDeviceChoice("cuda")}
                         className={`py-1 rounded text-[10px] font-bold transition-all ${deviceChoice === "cuda" ? "bg-blue-500 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
                       >
                         GPU (CUDA)
                       </button>
-                      <button 
-                        onClick={() => setDeviceChoice("cpu")} 
+                      <button
+                        onClick={() => setDeviceChoice("cpu")}
                         className={`py-1 rounded text-[10px] font-bold transition-all ${deviceChoice === "cpu" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
                       >
                         CPU
@@ -224,18 +307,23 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
                   {deviceChoice === "cuda" && (
                     <div className="space-y-1.5 pt-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-[9px] font-bold text-zinc-500 uppercase">Target GPU</label>
-                        <button 
+                        <label className="text-[9px] font-bold text-zinc-500 uppercase">
+                          Target GPU
+                        </label>
+                        <button
                           onClick={async () => {
                             try {
                               const res = await fetch(`${API_URL}/gpus`, {
-                                headers: { "X-API-Key": API_KEY }
+                                headers: { "X-API-Key": API_KEY },
                               });
-                              if (!res.ok) throw new Error("Failed to fetch GPUs");
+                              if (!res.ok)
+                                throw new Error("Failed to fetch GPUs");
                               const data = await res.json();
                               setGpuList(data);
-                            } catch (e: any) {
-                              setError(`GPU Refresh Failed: ${e.message}`);
+                            } catch (e: unknown) {
+                              const msg =
+                                e instanceof Error ? e.message : String(e);
+                              setError(`GPU Refresh Failed: ${msg}`);
                             }
                           }}
                           className="text-[8px] font-bold text-blue-500 hover:text-blue-400 uppercase flex items-center gap-1"
@@ -243,14 +331,16 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
                           <RefreshCw size={8} /> Refresh
                         </button>
                       </div>
-                      
+
                       {gpuList.length > 0 ? (
-                        <select 
-                          value={gpuChoice} 
-                          onChange={(e) => setGpuChoice(parseInt(e.target.value))}
+                        <select
+                          value={gpuChoice}
+                          onChange={(e) =>
+                            setGpuChoice(parseInt(e.target.value))
+                          }
                           className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors"
                         >
-                          {gpuList.map((gpu: any) => (
+                          {gpuList.map((gpu: { id: number; name: string }) => (
                             <option key={gpu.id} value={gpu.id}>
                               {gpu.name}
                             </option>
@@ -265,20 +355,39 @@ export function Inspector({ setError }: { setError: (err: string | null) => void
                     </div>
                   )}
 
-                  <ControlInput 
-                    label="Max Epochs" value={maxEpochs} onChange={setMaxEpochs} min={0} max={10000} step={1} 
+                  <ControlInput
+                    label="Max Epochs"
+                    value={maxEpochs}
+                    onChange={setMaxEpochs}
+                    min={0}
+                    max={10000}
+                    step={1}
                     tooltip="The maximum number of passes through the data for each trial."
                   />
-                  <ControlInput 
-                    label="Early Stop Patience" value={patience} onChange={setPatience} min={1} max={1000} 
+                  <ControlInput
+                    label="Early Stop Patience"
+                    value={patience}
+                    onChange={setPatience}
+                    min={1}
+                    max={1000}
                     tooltip="How many epochs to wait for improvement before giving up on a trial."
                   />
-                  <ControlInput 
-                    label="GPU Throttle (s)" value={gpuThrottle} onChange={setGpuThrottle} min={0} max={0.25} step={0.01} 
+                  <ControlInput
+                    label="GPU Throttle (s)"
+                    value={gpuThrottle}
+                    onChange={setGpuThrottle}
+                    min={0}
+                    max={0.25}
+                    step={0.01}
                     tooltip="Introduces a small sleep between epochs to lower GPU utilization and heat."
                   />
-                  <RangeControl 
-                    label="CNN Filter Cap (Range)" value={cnnFilterCapRange} onChange={setCnnFilterCapRange} min={16} max={4096} step={16} 
+                  <RangeControl
+                    label="CNN Filter Cap (Range)"
+                    value={cnnFilterCapRange}
+                    onChange={setCnnFilterCapRange}
+                    min={16}
+                    max={4096}
+                    step={16}
                     tooltip="Limits the maximum number of filters in deep layers."
                   />
                 </div>

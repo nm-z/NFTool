@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
+import {
+  Panel,
+  Group as PanelGroup,
+  Separator as PanelResizeHandle,
+} from "react-resizable-panels";
 import { Settings, AlertCircle } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTrainingStore } from "@/store/useTrainingStore";
@@ -16,45 +20,59 @@ import { Inspector } from "@/components/inspector/Inspector";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-const WS_URL = API_URL.replace(/^http/, "ws");
+const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_URL = `${API_ROOT}/api/v1`;
+// WebSocket server is mounted at the application root (`/ws`), not under `/api/v1`.
+const WS_URL = API_ROOT.replace(/^http/, "ws");
 
 export default function Dashboard() {
-  const { 
-    activeWorkspace, setActiveWorkspace,
-    isRunning, setIsRunning,
-    isStarting, setIsStarting,
-    isAborting, setIsAborting,
-    progress, setProgress,
-    currentTrial, totalTrials, setTrialInfo,
-    isAdvancedMode, setIsAdvancedMode,
-    hardwareStats, setHardwareStats,
-    addLog, setLogs,
+  const {
+    activeWorkspace,
+    setActiveWorkspace,
+    isRunning,
+    setIsRunning,
+    isStarting,
+    setIsStarting,
+    isAborting,
+    setIsAborting,
+    progress,
+    setProgress,
+    currentTrial,
+    totalTrials,
+    setTrialInfo,
+    addLog,
+    setLogs,
     setResult,
     setMetricsHistory,
     addMetric,
     setGpuList,
-    datasets, setDatasets,
-    selectedPredictor, setSelectedPredictor,
-    selectedTarget, setSelectedTarget,
-    runs, setRuns,
-    split, setSplit,
-    deviceChoice, gpuChoice
+    setDatasets,
+    setSelectedPredictor,
+    setSelectedTarget,
+    setRuns,
+    setHardwareStats,
   } = useTrainingStore();
 
   const [isMounted, setIsMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
-  const [wsStatus, setWsStatus] = useState<number>(3); 
+  const startTimeoutRef = useRef<number | null>(null);
+  const startRequestTsRef = useRef<number | null>(null);
+  const [wsStatus, setWsStatus] = useState<number>(3);
 
   const getConnectionStatus = () => {
     switch (wsStatus) {
-      case 0: return { label: "CONNECTING", color: "bg-[#f59e0b]" };
-      case 1: return { label: "CONNECTED", color: "bg-[#22c55e]" };
-      case 2: return { label: "CLOSING", color: "bg-[#f59e0b]" };
-      case 3: return { label: "CLOSED", color: "bg-[#ef4444]" };
-      default: return { label: "DISCONNECTED", color: "bg-[#ef4444]" };
+      case 0:
+        return { label: "CONNECTING", color: "bg-[#f59e0b]" };
+      case 1:
+        return { label: "CONNECTED", color: "bg-[#22c55e]" };
+      case 2:
+        return { label: "CLOSING", color: "bg-[#f59e0b]" };
+      case 3:
+        return { label: "CLOSED", color: "bg-[#ef4444]" };
+      default:
+        return { label: "DISCONNECTED", color: "bg-[#ef4444]" };
     }
   };
 
@@ -67,33 +85,46 @@ export default function Dashboard() {
     const headers = { "X-API-Key": API_KEY };
     const fetchData = async () => {
       try {
-        const dsRes = await fetch(`${API_URL}/datasets`, { headers });
+        const dsRes = await fetch(`${API_URL}/data/datasets`, { headers });
         if (dsRes.ok) {
           const data = await dsRes.json();
           if (Array.isArray(data)) {
             setDatasets(data);
-            if (data.length > 0 && !selectedPredictor) {
-              const pFile = data.find((d: any) => d.name.toLowerCase().includes("predictor")) || data[0];
-              const tFile = data.find((d: any) => d.name.toLowerCase().includes("target")) || (data.length > 1 ? data[1] : data[0]);
-              if (pFile) setSelectedPredictor(pFile.path);
-              if (tFile) setSelectedTarget(tFile.path);
+            if (data.length > 0) {
+              // Prefer a predictor/target if named accordingly, otherwise don't force empty selection.
+              const pFile =
+                data.find((d: { name?: string; path?: string }) =>
+                  d.name?.toLowerCase().includes("predictor"),
+                ) || data[0];
+              const tFile =
+                data.find((d: { name?: string; path?: string }) =>
+                  d.name?.toLowerCase().includes("target"),
+                ) || (data.length > 1 ? data[1] : undefined);
+              if (pFile && pFile.path) setSelectedPredictor(pFile.path);
+              if (tFile && tFile.path) setSelectedTarget(tFile.path);
             }
           }
         }
-      } catch (e) { console.error("Dataset fetch error:", e); }
+      } catch (e) {
+        console.error("Dataset fetch error:", e);
+      }
 
       try {
-        const runsRes = await fetch(`${API_URL}/runs`, { headers });
+        const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
         if (runsRes.ok) setRuns(await runsRes.json());
-      } catch (e) { console.error("Runs fetch error:", e); }
+      } catch (e) {
+        console.error("Runs fetch error:", e);
+      }
 
       try {
         const gpuRes = await fetch(`${API_URL}/gpus`, { headers });
         if (gpuRes.ok) setGpuList(await gpuRes.json());
-      } catch (e) { console.error("GPU fetch error:", e); }
+      } catch (e) {
+        console.error("GPU fetch error:", e);
+      }
     };
     fetchData();
-  }, [isMounted, API_URL, API_KEY, setDatasets, setRuns, setGpuList, selectedPredictor, setSelectedPredictor, setSelectedTarget]);
+  }, [isMounted, setDatasets, setRuns, setGpuList, setSelectedPredictor, setSelectedTarget]);
 
   useEffect(() => {
     if (!isMounted) return;
@@ -106,28 +137,47 @@ export default function Dashboard() {
         ws = new WebSocket(`${WS_URL}/ws`, [`api-key-${API_KEY}`]);
         socketRef.current = ws;
         setWsStatus(ws.readyState);
-        
-        ws.onopen = () => { 
+
+        ws.onopen = () => {
           if (active) {
-            console.log("WebSocket connected to:", WS_URL);
-            setWsStatus(1); 
+            console.debug("WebSocket connected to:", WS_URL, {
+              ts: Date.now(),
+            });
+            setWsStatus(1);
           }
         };
-        
+
         ws.onmessage = (event) => {
           if (!active) return;
           try {
+            console.debug("WS raw message:", event.data);
             const msg = JSON.parse(event.data);
+            console.debug("WS parsed message:", {
+              type: msg.type,
+              data: msg.data,
+            });
             if (msg.type === "init") {
               setIsRunning(msg.data.is_running);
               if (msg.data.is_running) setIsStarting(false);
               setIsAborting(msg.data.is_aborting || false);
               setProgress(msg.data.progress);
               setTrialInfo(msg.data.current_trial, msg.data.total_trials);
-              setResult(msg.data.result);
-              if (msg.data.metrics_history) setMetricsHistory(msg.data.metrics_history);
-              if (msg.data.hardware_stats) setHardwareStats(msg.data.hardware_stats);
-              if (msg.data.logs) setLogs(msg.data.logs);
+              // Only apply server-provided result/logs/metrics when:
+              // - the engine is currently running, OR
+              // - a result/metrics are explicitly present, OR
+              // - a model or dataset has been intentionally selected (deploy behavior).
+              // This prevents showing leftover logs/metrics on fresh UI open.
+              const hasServerState = Boolean(
+                msg.data.is_running || msg.data.result,
+              );
+              if (hasServerState) {
+                setResult(msg.data.result);
+                if (msg.data.metrics_history)
+                  setMetricsHistory(msg.data.metrics_history);
+                if (msg.data.hardware_stats)
+                  setHardwareStats(msg.data.hardware_stats);
+                if (msg.data.logs) setLogs(msg.data.logs);
+              }
             } else if (msg.type === "status") {
               setIsRunning(msg.data.is_running);
               if (msg.data.is_running) setIsStarting(false);
@@ -142,39 +192,131 @@ export default function Dashboard() {
             } else if (msg.type === "hardware") {
               setHardwareStats(msg.data);
             }
-          } catch (e) { console.error("WS message parse error:", e); }
-        };
-        
-        ws.onclose = () => { 
-          if (active) { 
-            console.log("WebSocket closed, retrying...");
-            setWsStatus(3); 
-            setTimeout(connect, 5000); 
-          } 
-        };
-        
-        ws.onerror = (e) => { 
-          if (active) {
-            console.error("WebSocket error:", e);
-            setWsStatus(3); 
+          } catch (e) {
+            console.error("WS message parse error:", e);
           }
         };
-      } catch (e) { console.error("WS connection instantiation error:", e); }
+
+        ws.onclose = () => {
+          if (active) {
+            console.debug("WebSocket closed, retrying...", { ts: Date.now() });
+            setWsStatus(3);
+            setTimeout(connect, 5000);
+          }
+        };
+
+        ws.onerror = (e) => {
+          if (active) {
+            console.error("WebSocket error:", e);
+            setWsStatus(3);
+          }
+        };
+      } catch (e) {
+        console.error("WS connection instantiation error:", e);
+      }
     };
     connect();
-    return () => { active = false; if (ws) ws.close(); };
-  }, [isMounted, WS_URL, API_KEY, setIsRunning, setProgress, setTrialInfo, setResult, setMetricsHistory, setHardwareStats, setLogs, addLog, addMetric, setIsAborting]);
+    return () => {
+      active = false;
+      if (ws) ws.close();
+    };
+  }, [
+    isMounted,
+    setIsRunning,
+    setProgress,
+    setTrialInfo,
+    setResult,
+    setMetricsHistory,
+    setHardwareStats,
+    setLogs,
+    addLog,
+    addMetric,
+    setIsAborting,
+    setIsStarting,
+  ]);
+
+  // Polling fallback: when WebSocket is disconnected or while starting, poll runs
+  useEffect(() => {
+    if (!isMounted) return;
+    let intervalId: number | null = null;
+    const shouldPoll = wsStatus === 3 || isStarting;
+    const poll = async () => {
+      try {
+        const headers = { "X-API-Key": API_KEY };
+        const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+        if (runsRes.ok) {
+          const runsJson = await runsRes.json();
+          setRuns(runsJson);
+          const active = Array.isArray(runsJson)
+            ? runsJson.find(
+                (r: Record<string, unknown>) =>
+                  (r["status"] as string | undefined) === "running",
+              )
+            : undefined;
+          const queued = Array.isArray(runsJson)
+            ? runsJson.find(
+                (r: Record<string, unknown>) =>
+                  (r["status"] as string | undefined) === "queued",
+              )
+            : undefined;
+          if (active) {
+            setIsRunning(true);
+            setIsStarting(false);
+          } else if (queued) {
+            setIsRunning(false);
+            setIsStarting(true);
+          } else {
+            setIsRunning(false);
+            setIsStarting(false);
+          }
+        }
+      } catch {
+        // ignore transient errors
+      }
+    };
+
+    if (shouldPoll) {
+      // initial immediate poll
+      poll();
+      intervalId = window.setInterval(poll, 2000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+  }, [isMounted, wsStatus, isStarting, setRuns, setIsRunning, setIsStarting]);
 
   const parseRange = (val: string): [number, number] => {
-    const parts = val.split("→").map(part => part.trim());
+    const parts = val.split("→").map((part) => part.trim());
     const min = parseFloat(parts[0]) || 0;
     const max = parseFloat(parts[parts.length - 1]) || min;
     return [min, max];
   };
 
+  // Clear the start timeout if the engine reports it is running.
+  useEffect(() => {
+    if (isRunning && startTimeoutRef.current) {
+      clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+    }
+  }, [isRunning]);
+
+  // Ensure timeout is cleared on unmount.
+  useEffect(() => {
+    return () => {
+      if (startTimeoutRef.current) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const handleStartTraining = async () => {
     const s = useTrainingStore.getState();
-    
+
     const [lrMin, lrMax] = parseRange(s.lrRange);
     const [layersMin, layersMax] = parseRange(s.layersRange);
     const [lSizeMin, lSizeMax] = parseRange(s.layerSizeRange);
@@ -212,57 +354,228 @@ export default function Dashboard() {
       device: s.deviceChoice,
       gpu_id: s.gpuChoice,
       predictor_path: s.selectedPredictor,
-      target_path: s.selectedTarget
+      target_path: s.selectedTarget,
     };
+    // Debug: ensure selections are visible in console
+    console.debug("Starting training with selectedPredictor:", s.selectedPredictor, "selectedTarget:", s.selectedTarget, "datasets:", s.datasets?.length);
 
+    // If the UI didn't set predictor/target but datasets exist, auto-fill sensible defaults.
+    if ((!s.selectedPredictor || !s.selectedPredictor.trim()) && Array.isArray(s.datasets) && s.datasets.length > 0) {
+      const p = s.datasets.find((d: { name?: string; path?: string }) => d.name?.toLowerCase().includes("predictor")) || s.datasets[0];
+      if ((p as { path?: string }).path) s.setSelectedPredictor((p as { path?: string }).path as string);
+    }
+    if ((!s.selectedTarget || !s.selectedTarget.trim()) && Array.isArray(s.datasets) && s.datasets.length > 1) {
+      const t =
+        s.datasets.find((d: { name?: string; path?: string }) => d.name?.toLowerCase().includes("target")) ||
+        (s.datasets.length > 1 ? s.datasets[1] : s.datasets[0]);
+      if ((t as { path?: string }).path) s.setSelectedTarget((t as { path?: string }).path as string);
+    }
+
+    // Validate final selections (re-read from store since we may have autofilled above)
+    const finalState = useTrainingStore.getState();
+    const finalPredictor = finalState.selectedPredictor?.trim();
+    const finalTarget = finalState.selectedTarget?.trim();
+    if (!finalPredictor || !finalTarget) {
+      const msg = "Please select both predictor and target dataset files before starting training.";
+      console.error(msg, { finalPredictor, finalTarget });
+      setError(msg);
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        msg: `Execution Error: ${msg}`,
+        type: "warn",
+      });
+      setIsStarting(false);
+      return;
+    }
     setIsStarting(true);
+    console.debug("handleStartTraining: initiating training request", {
+      config,
+    });
+    startRequestTsRef.current = Date.now();
+    // Start a 10s watchdog: if the engine hasn't reported `is_running` within
+    // 10 do not make this no 30s, it should not take even 5s.
+    if (startTimeoutRef.current) {
+      clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+    }
+    startTimeoutRef.current = window.setTimeout(() => {
+      const runningNow = useTrainingStore.getState().isRunning;
+      if (!runningNow) {
+        const msg = "Training failed to start within 10 seconds.";
+        console.error(msg);
+        setError(msg);
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          msg: `Execution Error: ${msg}`,
+          type: "warn",
+        });
+        setIsStarting(false);
+      }
+      startTimeoutRef.current = null;
+    }, 10000);
     try {
-      const res = await fetch(`${API_URL}/train`, {
+      const res = await fetch(`${API_URL}/training/train`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": API_KEY
+          "X-API-Key": API_KEY,
         },
-        body: JSON.stringify(config)
+        body: JSON.stringify(config),
       });
-      
+
+      console.debug("handleStartTraining: POST /train returned", {
+        status: res.status,
+        ok: res.ok,
+        elapsedMs:
+          startRequestTsRef.current != null
+            ? Date.now() - startRequestTsRef.current
+            : null,
+      });
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(errorText || `Server responded with ${res.status}`);
       }
-      
+
       const data = await res.json();
-      addLog({ 
-        time: new Date().toLocaleTimeString(), 
-        msg: `Training pipeline initiated: ${data.run_id}`, 
-        type: "info" 
+      // On successful submission, clear the short watchdog so we don't show a
+      // false-positive "failed to start" while the backend queues/starts the run.
+      if (startTimeoutRef.current) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
+      }
+      console.debug("handleStartTraining: train response json", data);
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        msg: `Training pipeline initiated: ${data.run_id}`,
+        type: "info",
       });
-    } catch (e: any) {
+
+      // Immediately poll the runs endpoint once to update UI state so the
+      // dashboard doesn't stay stuck on "Starting..." if the WebSocket is
+      // briefly disconnected. We'll still keep the longer watchdog below.
+      const runId = data.run_id;
+      (async function immediateRunSync(id: string) {
+        try {
+          const headers = { "X-API-Key": API_KEY };
+          const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+          if (runsRes.ok) {
+            const runsJson = await runsRes.json();
+            setRuns(runsJson);
+            const found =
+              Array.isArray(runsJson) &&
+              runsJson.find((r: Record<string, unknown>) => r["run_id"] === id);
+            if (found) {
+              const foundStatus = (found as Record<string, unknown>)["status"] as
+                | string
+                | undefined;
+              if (foundStatus === "running") {
+                setIsRunning(true);
+                setIsStarting(false);
+              } else if (foundStatus === "queued") {
+                // remain in starting state but ensure UI has the latest run list
+                setIsRunning(false);
+                setIsStarting(true);
+              }
+            }
+          }
+        } catch (err) {
+          console.debug("Immediate run sync failed:", err);
+        }
+      })(runId).catch(() => {});
+
+      // Begin a longer watchdog and poll the runs endpoint for this run id so
+      // we don't show a false "failed to start" when the backend is queuing.
+      const watchdogMs = 30000;
+      const pollIntervalMs = 1000;
+
+      // Start a 30s watchdog; it will be cleared if the run is observed.
+      if (startTimeoutRef.current) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
+      }
+      startTimeoutRef.current = window.setTimeout(() => {
+        const runningNow = useTrainingStore.getState().isRunning;
+        if (!runningNow) {
+          const msg = "Training failed to start within 30 seconds.";
+          console.error(msg);
+          setError(msg);
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            msg: `Execution Error: ${msg}`,
+            type: "warn",
+          });
+          setIsStarting(false);
+        }
+        startTimeoutRef.current = null;
+      }, watchdogMs);
+
+      (async function pollRunUntilRunning(id: string) {
+        const headers = { "X-API-Key": API_KEY };
+        const deadline = Date.now() + watchdogMs;
+        while (Date.now() < deadline) {
+          try {
+            const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+            if (runsRes.ok) {
+              const runs = await runsRes.json();
+              const found =
+                Array.isArray(runs) &&
+                runs.find(
+                  (r: Record<string, unknown>) =>
+                    (r["run_id"] as string | undefined) === id,
+                );
+              if (found) {
+                // If backend has acknowledged the run (queued/running), clear watchdog.
+                const foundStatus = (found as Record<string, unknown>)["status"] as
+                  | string
+                  | undefined;
+                if (foundStatus === "queued" || foundStatus === "running") {
+                  if (startTimeoutRef.current) {
+                    clearTimeout(startTimeoutRef.current);
+                    startTimeoutRef.current = null;
+                  }
+                  return;
+                }
+              }
+            }
+          } catch {
+            // ignore transient poll errors
+          }
+          await new Promise((res) => setTimeout(res, pollIntervalMs));
+        }
+      })(runId).catch(() => {});
+    } catch (e: unknown) {
       console.error("Training error:", e);
-      setError(`Execution Failed: ${e.message}`);
-      addLog({ 
-        time: new Date().toLocaleTimeString(), 
-        msg: `Execution Error: ${e.message}`, 
-        type: "warn" 
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(`Execution Failed: ${msg}`);
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        msg: `Execution Error: ${msg}`,
+        type: "warn",
       });
       setIsStarting(false);
+      if (startTimeoutRef.current) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
+      }
     }
   };
 
   const handleAbortTraining = async () => {
     try {
-      const res = await fetch(`${API_URL}/abort`, {
+      const res = await fetch(`${API_URL}/training/abort`, {
         method: "POST",
-        headers: { "X-API-Key": API_KEY }
+        headers: { "X-API-Key": API_KEY },
       });
       if (!res.ok) throw new Error(await res.text());
-      addLog({ 
-        time: new Date().toLocaleTimeString(), 
-        msg: "Termination signal dispatched to core engine", 
-        type: "warn" 
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        msg: "Termination signal dispatched to core engine",
+        type: "warn",
       });
-    } catch (e: any) {
-      setError(`Abort Failed: ${e.message}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(`Abort Failed: ${msg}`);
     }
   };
 
@@ -272,18 +585,21 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white selection:bg-blue-500/20 font-sans overflow-hidden">
-      <Header 
-        isRunning={isRunning} isStarting={isStarting} isAborting={isAborting} 
-        currentTrial={currentTrial} totalTrials={totalTrials} 
-        handleStartTraining={handleStartTraining} 
-        handleAbortTraining={handleAbortTraining} 
-        setActiveWorkspace={setActiveWorkspace} 
+      <Header
+        isRunning={isRunning}
+        isStarting={isStarting}
+        isAborting={isAborting}
+        currentTrial={currentTrial}
+        totalTrials={totalTrials}
+        handleStartTraining={handleStartTraining}
+        handleAbortTraining={handleAbortTraining}
+        setActiveWorkspace={setActiveWorkspace}
       />
 
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar 
-          activeWorkspace={activeWorkspace} 
-          setActiveWorkspace={setActiveWorkspace} 
+        <Sidebar
+          activeWorkspace={activeWorkspace}
+          setActiveWorkspace={setActiveWorkspace}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
@@ -309,9 +625,7 @@ export default function Dashboard() {
                 <PanelResizeHandle className="w-px bg-zinc-800 hover:bg-blue-500/50 transition-colors" />
                 <Panel defaultSize={25} minSize={20}>
                   <ErrorBoundary>
-                    <Inspector 
-                      setError={setError}
-                    />
+                    <Inspector setError={setError} />
                   </ErrorBoundary>
                 </Panel>
               </>
@@ -320,21 +634,27 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <Footer 
-        progress={progress} 
-        wsStatusLabel={connStatus.label} wsStatusColor={connStatus.color}
+      <Footer
+        progress={progress}
+        wsStatusLabel={connStatus.label}
+        wsStatusColor={connStatus.color}
       />
 
       {error && (
-        <div className="fixed bottom-12 right-6 z-[100] max-w-md animate-in fade-in slide-in-from-right-4">
+        <div className="fixed bottom-12 right-6 z-[100] max-w-md animate-in fade-in slide-in-from-right-4 pointer-events-none">
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 shadow-2xl backdrop-blur-md">
             <AlertCircle className="text-red-500 shrink-0" size={18} />
             <div className="flex-1">
-              <h4 className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1">System Error</h4>
-              <p className="text-[11px] text-red-200/80 font-mono leading-relaxed">{error}</p>
-              <button 
+              <h4 className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1">
+                System Error
+              </h4>
+              <p className="text-[11px] text-red-200/80 font-mono leading-relaxed">
+                {error}
+              </p>
+              <button
                 onClick={() => setError(null)}
-                className="mt-3 text-[10px] font-bold text-red-500 hover:text-red-400 uppercase"
+                className="mt-3 text-[10px] font-bold text-red-500 hover:text-red-400 uppercase pointer-events-auto"
+                data-testid="btn-dismiss-error"
               >
                 Dismiss
               </button>
@@ -351,19 +671,24 @@ export default function Dashboard() {
               <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
                 <Settings size={18} />
               </div>
-              <Dialog.Title className="text-sm font-bold uppercase tracking-widest">Global Settings</Dialog.Title>
+              <Dialog.Title className="text-sm font-bold uppercase tracking-widest">
+                Global Settings
+              </Dialog.Title>
             </div>
             <Dialog.Description className="sr-only">
               System configuration and preference persistence settings.
             </Dialog.Description>
             <div className="space-y-4 py-4 border-y border-zinc-800/50">
               <p className="text-[11px] text-zinc-400 font-mono leading-relaxed">
-                System configuration module is currently under development. Preference persistence and API endpoint configuration will be available in V3.1.
+                System configuration module is currently under development.
+                Preference persistence and API endpoint configuration will be
+                available in V3.1.
               </p>
             </div>
             <div className="mt-6 flex justify-end">
-              <button 
+              <button
                 type="button"
+                data-testid="settings-close"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsSettingsOpen(false);

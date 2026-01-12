@@ -5,14 +5,16 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with legacy peer deps
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
 EXPOSE 3000
 
+# Docker signal to handle graceful shutdown
+STOPSIGNAL SIGTERM
+
 # Run in development mode
 CMD ["npm", "run", "dev"]
-

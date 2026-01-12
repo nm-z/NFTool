@@ -15,4 +15,5 @@ aiofiles
 jinja2
 psutil
 kaleido
+plotly
 matplotlib

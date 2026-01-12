@@ -1,30 +1,14 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import List, Dict, Any, Optional
+import logging
 import os
 from pathlib import Path
-from fastapi import HTTPException
-import logging
+from typing import List
+
+from pydantic import BaseModel, Field, model_validator
+from pydantic.types import FilePath
 from src.config import REPO_ROOT, WORKSPACE_DIR
 
 logger = logging.getLogger("nftool")
 
-def safe_path(relative_path: str):
-    """Sanitize and validate path to prevent directory traversal"""
-    try:
-        base_path = Path(REPO_ROOT).resolve()
-        target_path = (base_path / relative_path).resolve()
-        
-        workspace_root = Path(WORKSPACE_DIR).resolve()
-        data_root = (base_path / "data").resolve()
-        
-        # logger.info(f"safe_path validation: {target_path} (base: {base_path})")
-        
-        if target_path.is_relative_to(workspace_root) or target_path.is_relative_to(data_root):
-            return str(target_path)
-            
-        raise HTTPException(status_code=403, detail=f"Access denied: {target_path} is outside allowed directories (Data: {data_root}, Workspace: {workspace_root})")
-    except ValueError:
-        raise HTTPException(status_code=403, detail="Invalid path structure")
 
 class TrainingConfig(BaseModel):
     model_choice: str = Field(..., pattern="^(NN|CNN)$")
@@ -49,28 +33,35 @@ class TrainingConfig(BaseModel):
     conv_blocks_max: int = Field(default=5, ge=1, le=10)
     kernel_size: int = Field(default=3, ge=1, le=15)
     gpu_throttle_sleep: float = Field(default=0.1, ge=0.0, le=5.0)
-    cnn_filter_cap_min: int = Field(default=512, ge=16, le=4096)
+    cnn_filter_cap_min: int = Field(default=16, ge=16, le=4096)
     cnn_filter_cap_max: int = Field(default=512, ge=16, le=4096)
     max_epochs: int = Field(default=200, ge=1, le=10000)
     device: str = Field(default="cuda", pattern="^(cuda|cpu)$")
     gpu_id: int = Field(default=0, ge=0)
-    predictor_path: str
-    target_path: str
+    predictor_path: FilePath
+    target_path: FilePath
 
-    @model_validator(mode='after')
-    def validate_ratios(self) -> 'TrainingConfig':
+    @model_validator(mode="after")
+    def validate_ratios_and_paths(self) -> "TrainingConfig":
+        # Validate ratios
         total = self.train_ratio + self.val_ratio + self.test_ratio
         if not (0.99 <= total <= 1.01):
             raise ValueError(f"Ratios must sum to 1.0 (got {total:.2f})")
-        return self
 
-    @field_validator('predictor_path', 'target_path')
-    @classmethod
-    def validate_paths(cls, v: str) -> str:
-        try:
-            target = safe_path(v)
-            if not os.path.exists(target):
-                raise ValueError(f"File not found: {v}")
-        except HTTPException as e:
-            raise ValueError(f"Invalid path: {e.detail}")
-        return v
+        # Validate paths
+        base_path = Path(REPO_ROOT).resolve()
+        workspace_root = Path(WORKSPACE_DIR).resolve()
+        data_root = (base_path / "data").resolve()
+
+        for path_field in [self.predictor_path, self.target_path]:
+            target_path = Path(path_field).resolve()
+            if not target_path.is_relative_to(
+                workspace_root
+            ) and not target_path.is_relative_to(data_root):
+                raise ValueError(
+                    f"Access denied: {target_path} is outside allowed directories (Data: {data_root}, Workspace: {workspace_root})"
+                )
+            if not os.path.exists(target_path):
+                raise ValueError(f"File not found: {path_field}")
+
+        return self

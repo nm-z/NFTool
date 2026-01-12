@@ -1,0 +1,4 @@
+# file: /home/nate/Desktop/NFTool/backend/src/config.py
+# hypothesis_version: 6.150.0
+
+['API_KEY', 'DATABASE_URL', 'WORKSPACE_DIR', 'logs', 'plyo', 'runs/reports', 'runs/results', 'workspace']

@@ -1,15 +1,15 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 interface LogEntry {
   time: string;
   msg: string;
-  type: 'default' | 'info' | 'success' | 'warn' | 'optuna';
+  type: "default" | "info" | "success" | "warn" | "optuna";
   epoch?: number; // Add epoch as an optional field
 }
 
 interface TrainingResult {
   best_r2: number;
-  best_params: Record<string, any>;
+  best_params: Record<string, unknown>;
 }
 
 interface MetricPoint {
@@ -38,7 +38,7 @@ interface TrainingState {
   // Global App State
   activeWorkspace: WorkspaceType;
   isAdvancedMode: boolean;
-  
+
   // Training Engine State
   isRunning: boolean;
   isStarting: boolean;
@@ -49,21 +49,21 @@ interface TrainingState {
   logs: LogEntry[];
   result: TrainingResult | null;
   metricsHistory: MetricPoint[];
-  
+
   // Hardware/System State
   hardwareStats: HardwareStats | null;
-  
+
   // Model/Asset State
   deviceChoice: "cuda" | "cpu";
   gpuChoice: number;
-  gpuList: {id: number, name: string}[];
+  gpuList: { id: number; name: string }[];
   loadedModelPath: string | null;
   activePreset: string;
   hasUnsavedChanges: boolean;
   selectedPredictor: string;
   selectedTarget: string;
-  datasets: {name: string, path: string}[];
-  runs: any[];
+  datasets: { name: string; path: string }[];
+  runs: Record<string, unknown>[];
 
   // Training Configuration (Inspector States)
   seed: string;
@@ -81,7 +81,7 @@ interface TrainingState {
   maxEpochs: string;
   gpuThrottle: string;
   cnnFilterCapRange: string;
-  
+
   // Actions
   setActiveWorkspace: (ws: WorkspaceType) => void;
   setIsAdvancedMode: (mode: boolean) => void;
@@ -99,14 +99,14 @@ interface TrainingState {
   setHardwareStats: (stats: HardwareStats) => void;
   setDeviceChoice: (device: "cuda" | "cpu") => void;
   setGpuChoice: (id: number) => void;
-  setGpuList: (gpus: {id: number, name: string}[]) => void;
+  setGpuList: (gpus: { id: number; name: string }[]) => void;
   setLoadedModelPath: (path: string | null) => void;
   setActivePreset: (preset: string) => void;
   setHasUnsavedChanges: (hasUnsavedChanges: boolean) => void;
   setSelectedPredictor: (path: string) => void;
   setSelectedTarget: (path: string) => void;
-  setDatasets: (datasets: {name: string, path: string}[]) => void;
-  setRuns: (runs: any[]) => void;
+  setDatasets: (datasets: { name: string; path: string }[]) => void;
+  setRuns: (runs: Record<string, unknown>[]) => void;
 
   // Config Setters
   setSeed: (v: string) => void;
@@ -173,15 +173,17 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   setIsStarting: (isStarting) => set({ isStarting }),
   setIsAborting: (isAborting) => set({ isAborting }),
   setProgress: (progress) => set({ progress: progress ?? 0 }),
-  setTrialInfo: (current, total) => set({ 
-    currentTrial: current ?? 0, 
-    totalTrials: total ?? 0 
-  }),
+  setTrialInfo: (current, total) =>
+    set({
+      currentTrial: current ?? 0,
+      totalTrials: total ?? 0,
+    }),
   addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
   setLogs: (logs) => set({ logs }),
   setResult: (result) => set({ result }),
   clearLogs: () => set({ logs: [] }),
-  addMetric: (metric) => set((state) => ({ metricsHistory: [...state.metricsHistory, metric] })),
+  addMetric: (metric) =>
+    set((state) => ({ metricsHistory: [...state.metricsHistory, metric] })),
   setMetricsHistory: (metrics) => set({ metricsHistory: metrics }),
   setHardwareStats: (stats) => set({ hardwareStats: stats }),
   setDeviceChoice: (deviceChoice) => set({ deviceChoice }),

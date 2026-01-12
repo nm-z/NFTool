@@ -1,0 +1,13 @@
+{
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false,
+  "include": ["backend/src"],
+  "exclude": [
+    "**/node_modules/**",
+    "frontend/**",
+    "workspace/**",
+    "video2x/**",
+    "**/third_party/**",
+    "backend/src/api.py"
+  ]
+}
