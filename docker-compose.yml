@@ -10,8 +10,11 @@ services:
     volumes:
       - ./workspace:/app/workspace
       - ./data:/app/data
+      - /opt/rocm:/opt/rocm:ro
     environment:
       - API_KEY=nftool-dev-key
+      - PATH=/opt/rocm/bin:$PATH
+      - HSA_OVERRIDE_GFX_VERSION=11.0.0
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -26,6 +29,9 @@ services:
       dockerfile: Dockerfile.frontend
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
     environment:

@@ -104,8 +104,11 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   setIsAdvancedMode: (isAdvancedMode) => set({ isAdvancedMode }),
   setIsRunning: (isRunning) => set({ isRunning }),
   setIsAborting: (isAborting) => set({ isAborting }),
-  setProgress: (progress) => set({ progress }),
-  setTrialInfo: (current, total) => set({ currentTrial: current, totalTrials: total }),
+  setProgress: (progress) => set({ progress: progress ?? 0 }),
+  setTrialInfo: (current, total) => set({ 
+    currentTrial: current ?? 0, 
+    totalTrials: total ?? 0 
+  }),
   addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
   setLogs: (logs) => set({ logs }),
   setResult: (result) => set({ result }),
