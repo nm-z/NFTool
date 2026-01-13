@@ -3,7 +3,6 @@
 import logging
 
 from fastapi import Depends, Header, HTTPException
-
 from src.config import API_KEY
 
 logger = logging.getLogger("nftool")

@@ -2,11 +2,9 @@
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
-
-# Use the shared Base from src.database.database so create_all() creates these tables.
-from src.database.database import Base  # type: ignore
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy.orm import mapped_column, relationship
+from src.database.database import Base
 
 
 class Run(Base):
@@ -29,19 +27,20 @@ class Run(Base):
     """
 
     __tablename__ = "runs"
-    id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.now)
-    run_id = Column(String, unique=True, index=True)  # e.g. PASS_7721
-    model_choice = Column(String)
-    status = Column(String)  # running, completed, aborted, failed
-    progress = Column(Integer, default=0)
-    current_trial = Column(Integer, default=0)
-    best_r2 = Column(Float, nullable=True)
-    optuna_trials = Column(Integer)
-    config = Column(JSON)
-    report_path = Column(String, nullable=True)
-    metrics_history = Column(JSON, nullable=True)
-    logs = Column(JSON, default=[])
+    id = mapped_column(Integer, primary_key=True, index=True)
+    timestamp = mapped_column(DateTime, default=datetime.now)
+    # e.g. PASS_7721
+    run_id = mapped_column(String, unique=True, index=True)
+    model_choice = mapped_column(String)
+    status = mapped_column(String)  # running, completed, aborted, failed
+    progress = mapped_column(Integer, default=0)
+    current_trial = mapped_column(Integer, default=0)
+    best_r2 = mapped_column(Float, nullable=True)
+    optuna_trials = mapped_column(Integer)
+    config = mapped_column(JSON)
+    report_path = mapped_column(String, nullable=True)
+    metrics_history = mapped_column(JSON, nullable=True)
+    logs = mapped_column(JSON, default=[])
 
 
 class ModelCheckpoint(Base):
@@ -58,13 +57,13 @@ class ModelCheckpoint(Base):
     """
 
     __tablename__ = "checkpoints"
-    id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(Integer, ForeignKey("runs.id"))
-    timestamp = Column(DateTime, default=datetime.now)
-    model_path = Column(String)
-    scaler_path = Column(String)
-    r2_score = Column(Float)
-    params = Column(JSON)
+    id = mapped_column(Integer, primary_key=True, index=True)
+    run_id = mapped_column(Integer, ForeignKey("runs.id"))
+    timestamp = mapped_column(DateTime, default=datetime.now)
+    model_path = mapped_column(String)
+    scaler_path = mapped_column(String)
+    r2_score = mapped_column(Float)
+    params = mapped_column(JSON)
 
     run = relationship("Run", back_populates="checkpoints")
 

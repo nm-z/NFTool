@@ -1,7 +1,5 @@
 """Pytest fixtures for NFTool backend tests."""
 
-# pylint: disable=redefined-outer-name
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

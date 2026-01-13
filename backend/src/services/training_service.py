@@ -29,6 +29,8 @@ from src.utils.reporting import analyze_optuna_study, generate_regression_plots
 # This hides the libraries from Pyright's stub crawler but keeps them at runtime.
 jb: Any = __import__("joblib")
 optuna: Any = __import__("optuna")
+# Enable experimental sklearn features before importing model_selection
+__import__("sklearn.experimental.enable_halving_search_cv")
 sk_model: Any = __import__("sklearn.model_selection", fromlist=["*"])
 sk_pre: Any = __import__("sklearn.preprocessing", fromlist=["*"])
 torch_any: Any = torch

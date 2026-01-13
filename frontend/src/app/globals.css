@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-@theme {
+:root {
+  /* Font stacks (former @theme variables) */
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif,
@@ -8,9 +9,7 @@
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
-}
 
-:root {
   /* LM Studio Visual System: Utilitarian Zinc */
   --background: 240 10% 3.9%; /* zinc-950 */
   --foreground: 240 5% 65%; /* zinc-400 secondary */
@@ -34,21 +33,32 @@
   --space-lg: 16px;
 }
 
-@layer base {
-  * {
-    @apply border-[hsl(var(--border))];
-  }
-  body {
-    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased font-sans text-[13px] leading-tight selection:bg-[#3b82f6]/20;
-    text-rendering: auto;
-    letter-spacing: normal;
-  }
-  h1,
-  h2,
-  h3,
-  h4 {
-    @apply font-medium text-[hsl(var(--foreground-active))];
-  }
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.25;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: auto;
+  letter-spacing: normal;
+}
+
+body::selection {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 500;
+  color: hsl(var(--foreground-active));
 }
 
 /* Scrollbar: Near invisible utilitarian */
@@ -79,17 +89,51 @@
 
 /* Command Palette (cmdk) refinement */
 [cmdk-root] {
-  @apply flex flex-col w-full h-full bg-[#09090b] text-[#fafafa] overflow-hidden rounded-lg border border-[#18181b] shadow-2xl;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: #09090b;
+  color: #fafafa;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #18181b;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
 }
 [cmdk-input] {
-  @apply w-full border-none p-4 text-[14px] bg-transparent outline-none placeholder-[#52525b];
+  width: 100%;
+  border: none;
+  padding: 1rem;
+  font-size: 14px;
+  background-color: transparent;
+  outline: none;
+}
+[cmdk-input]::placeholder {
+  color: #52525b;
 }
 [cmdk-item] {
-  @apply flex items-center gap-2 px-4 py-3 text-[13px] cursor-default select-none transition-colors;
+  display: flex;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 13px;
+  cursor: default;
+  user-select: none;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
 }
 [cmdk-item][aria-selected="true"] {
-  @apply bg-[#18181b] text-[#fafafa];
+  background-color: #18181b;
+  color: #fafafa;
 }
 [cmdk-group-heading] {
-  @apply px-4 py-2 text-[11px] font-bold text-[#52525b] uppercase tracking-wider;
+  padding: 0.5rem 1rem;
+  font-size: 11px;
+  font-weight: 700;
+  color: #52525b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }

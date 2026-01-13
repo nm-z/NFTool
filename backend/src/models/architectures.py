@@ -5,6 +5,8 @@ on 1D signals: a residual convolutional block, a feed-forward regression net,
 and a CNN-based regression network.
 """
 
+from typing import Any
+
 import torch
 import torch.nn as nn
 
@@ -17,8 +19,16 @@ class ResidualBlock1D(nn.Module):
     from `out_channels` or when `stride != 1`.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
-        super().__init__()
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+    ) -> None:
+        # TYPE AIRLOCK: route super().__init__ through Any to satisfy strict typing.
+        base: Any = super()
+        base.__init__()
         padding = kernel_size // 2
         self.conv1 = nn.Conv1d(
             in_channels, out_channels, kernel_size, stride=stride, padding=padding
@@ -37,7 +47,7 @@ class ResidualBlock1D(nn.Module):
                 nn.BatchNorm1d(out_channels),
             )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Compute forward pass for the residual block."""
         residual = self.shortcut(x)
         out = self.relu(self.bn1(self.conv1(x)))
@@ -53,9 +63,13 @@ class RegressionNet(nn.Module):
     Linear layer that outputs a single scalar.
     """
 
-    def __init__(self, input_size, layers, dropout=0.0):
-        super().__init__()
-        net = []
+    def __init__(
+        self, input_size: int, layers: list[int], dropout: float = 0.0
+    ) -> None:
+        # TYPE AIRLOCK: route super().__init__ through Any to satisfy strict typing.
+        base: Any = super()
+        base.__init__()
+        net: list[nn.Module] = []
         last = input_size
         for size in layers:
             net.append(nn.Linear(last, size))
@@ -66,7 +80,7 @@ class RegressionNet(nn.Module):
         net.append(nn.Linear(last, 1))
         self.net = nn.Sequential(*net)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Run the input through the MLP and return a single-value prediction."""
         return self.net(x)
 
@@ -78,7 +92,13 @@ class CNNRegressionNet(nn.Module):
     concatenates pooled features, and passes them through a small MLP head.
     """
 
-    def __init__(self, freq_bins, conv_layers=None, hidden_dim=128, dropout=0.2):
+    def __init__(
+        self,
+        freq_bins: int,
+        conv_layers: list[dict[str, int]] | None = None,
+        hidden_dim: int = 128,
+        dropout: float = 0.2,
+    ) -> None:
         """
         Args:
             freq_bins: Number of input features (length of 1D signal).
@@ -90,7 +110,9 @@ class CNNRegressionNet(nn.Module):
             hidden_dim: Size of the first fully connected layer after CNN features.
             dropout: Dropout rate for the head.
         """
-        super().__init__()
+        # TYPE AIRLOCK: route super().__init__ through Any to satisfy strict typing.
+        base: Any = super()
+        base.__init__()
         if freq_bins < 8:
             raise ValueError(f"Input length ({freq_bins}) too short for CNN.")
 
@@ -101,7 +123,7 @@ class CNNRegressionNet(nn.Module):
                 {"out_channels": 128, "kernel": 3, "pool": 2},
             ]
 
-        layers = []
+        layers: list[nn.Module] = []
         in_channels = 1
         for layer_cfg in conv_layers:
             out_channels = layer_cfg["out_channels"]
@@ -133,7 +155,7 @@ class CNNRegressionNet(nn.Module):
             nn.Linear(hidden_dim // 2, 1),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Compute forward pass through CNN backbone and head, returning scalar."""
         features = self.cnn(x)
         avg_f = self.avg_pool(features)
@@ -143,7 +165,12 @@ class CNNRegressionNet(nn.Module):
         return self.head(flat)
 
 
-def model_factory(model_choice, input_size, config, device):
+def model_factory(
+    model_choice: str,
+    input_size: int | tuple[int, ...],
+    config: dict[str, Any],
+    device: torch.device,
+) -> nn.Module:
     """Create and return a model instance moved to `device`.
 
     Args:
@@ -154,6 +181,8 @@ def model_factory(model_choice, input_size, config, device):
         device: Torch device to `.to(device)`.
     """
     if model_choice == "NN":
+        if isinstance(input_size, tuple):
+            raise ValueError("RegressionNet requires int input_size, not tuple")
         return RegressionNet(
             input_size=input_size, layers=config["layers"], dropout=config["dropout"]
         ).to(device)
