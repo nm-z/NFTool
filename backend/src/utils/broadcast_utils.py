@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
 from sqlalchemy.orm import Session
-
 from src.database.models import Run
 from src.schemas.websocket import LogMessage, TelemetryMessage
 
