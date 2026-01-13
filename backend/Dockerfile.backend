@@ -12,14 +12,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install (install from pinned requirements)
-COPY requirements.txt .
-RUN uv pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/rocm6.2 -r requirements.txt \
-    && uv pip install --no-cache-dir pylint pylint-pydantic
+# Install uv (Python packaging tool) without using a pipe in RUN
+RUN set -eux; \
+    curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh; \
+    sh /tmp/uv-install.sh; \
+    rm /tmp/uv-install.sh
+ENV PATH="/root/.local/bin:${PATH}"
 
+# Copy requirements and install (install from pinned requirements) before copying the rest
+COPY requirements.txt /app/requirements.txt
+RUN uv pip install --system --no-cache-dir --extra-index-url https://download.pytorch.org/whl/rocm6.2 -r /app/requirements.txt \
+    && uv pip install --system --no-cache-dir pylint pylint-pydantic
 
-# Copy source code
-COPY . .
+# Copy source code (after dependency install to maximize Docker layer caching)
+COPY . /app
 
 # Environment variables
 ENV REPO_ROOT=/app

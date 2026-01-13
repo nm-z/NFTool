@@ -35,6 +35,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nftool")
 
+# Forward warnings and uvicorn logs into the same handlers so errors land in api.log.
+logging.captureWarnings(True)
+_root_handlers = logging.getLogger().handlers
+for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    _logger = logging.getLogger(_name)
+    _logger.setLevel(logging.DEBUG)
+    for _handler in _root_handlers:
+        if _handler not in _logger.handlers:
+            _logger.addHandler(_handler)
+    _logger.propagate = False
+
 # Initialize database (create tables)
 Base.metadata.create_all(bind=engine)
 
@@ -92,6 +103,21 @@ app.add_middleware(
 
 app.mount("/results", StaticFiles(directory=RESULTS_DIR), name="results")
 app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
+
+
+@app.exception_handler(Exception)
+async def log_unhandled_errors(request: Request, exc: Exception):
+    """Log any unhandled exception so it appears in api.log and return 500."""
+    logger.exception(
+        "Unhandled application error: method=%s path=%s exc=%r",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+    )
 
 
 @app.middleware("http")

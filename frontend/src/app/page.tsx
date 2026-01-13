@@ -19,11 +19,39 @@ import { LibraryWorkspace } from "@/components/workspaces/LibraryWorkspace";
 import { Inspector } from "@/components/inspector/Inspector";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+// API configuration with validation
+//
+// Environment setup:
+// - Local dev (outside Docker): set NEXT_PUBLIC_API_URL=http://localhost:8001 in .env.local
+// - Docker: environment variables are set in docker-compose.yml
+//
+// The API root must be a full HTTP/HTTPS URL that the browser can reach.
+// For Docker, it's http://localhost:8001 (backend service is mapped to host port).
+// For local dev, it's also http://localhost:8001 (backend runs directly on host).
+//
+const API_KEY_ENV = process.env.NEXT_PUBLIC_API_KEY;
+const API_KEY = API_KEY_ENV || "nftool-dev-key";
+
+const API_ROOT_ENV = process.env.NEXT_PUBLIC_API_URL;
+const API_ROOT =
+  API_ROOT_ENV && API_ROOT_ENV.startsWith("http")
+    ? API_ROOT_ENV
+    : "http://localhost:8001";
 const API_URL = `${API_ROOT}/api/v1`;
+
 // WebSocket server is mounted at the application root (`/ws`), not under `/api/v1`.
 const WS_URL = API_ROOT.replace(/^http/, "ws");
+
+// Runtime validation and logging
+if (API_ROOT_ENV && !API_ROOT_ENV.startsWith("http")) {
+  console.warn("NEXT_PUBLIC_API_URL is set but doesn't start with 'http', falling back to default:", API_ROOT);
+}
+console.debug("API configuration at runtime:", {
+  API_ROOT_ENV,
+  API_ROOT,
+  API_URL,
+  WS_URL
+});
 
 export default function Dashboard() {
   const {
@@ -497,6 +525,8 @@ export default function Dashboard() {
     setIsStarting(true);
     console.debug("handleStartTraining: initiating training request", {
       config,
+      apiUrl: API_URL,
+      finalUrl: `${API_URL}/training/train`,
     });
     startRequestTsRef.current = Date.now();
     // Start a 10s watchdog: if the engine hasn't reported `is_running` within
