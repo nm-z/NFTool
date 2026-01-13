@@ -1,9 +1,7 @@
 [tool.pylint.MASTER]
-init-hook='import sys; sys.path.append("backend")'
-load-plugins=
-    pylint_pydantic
+init-hook = 'import sys; sys.path.append("backend")'
+load-plugins = ["pylint_pydantic"]
 
 [tool.pylint.MESSAGE_CONTROL]
-disable=
-    missing-class-docstring,
-    missing-function-docstring
+disable = [
+]
