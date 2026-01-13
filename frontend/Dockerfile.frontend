@@ -26,9 +26,7 @@ EXPOSE 3000
 STOPSIGNAL SIGTERM
 
 
-# Run in development mode
-# Run as non-root user (improves container security)
-# Use explicit username which scanners commonly detect
-USER appuser
-USER appuser
+# Development environment execution
+# Active as root to prevent volume mount permission conflicts
+# Production Requirement: Implement non-root user (UID 1000)
 CMD ["npm", "run", "dev"]

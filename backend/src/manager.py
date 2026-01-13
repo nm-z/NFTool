@@ -17,7 +17,6 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import SQLAlchemyError
-
 from src.config import LOGS_DIR
 from src.database.database import SESSION_LOCAL
 from src.database.models import ModelCheckpoint, Run
@@ -222,8 +221,7 @@ class ConnectionManager:
             except (ValueError, IndexError, TypeError):
                 r2_float = None
             ck_tm = TelemetryMessage(
-                type="metrics",
-                data=MetricData(trial=trial_num, r2=r2_float)
+                type="metrics", data=MetricData(trial=trial_num, r2=r2_float)
             )
             await self.broadcast(ck_tm)
             last_ck = max(last_ck, int(getattr(ck, "id", last_ck)))
@@ -436,19 +434,22 @@ class ConnectionManager:
         async with self.client_lock:
             if not self.clients:
                 return
-            disconnected = []
+            disconnected: list[WebSocket] = []
             msg_json = message.model_dump_json()
             for client in list(self.clients):
                 try:
                     await client.send_text(msg_json)
-                except (WebSocketDisconnect, OSError, RuntimeError):
+                except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     # Mark client as disconnected; cleanup after attempting all sends
-                    disconnected: list[WebSocket] = (
-                        getattr(self, "_disconnected_clients", [])
-                    )
                     disconnected.append(client)
-                    logger.exception("WS send err; sched disconnect")
-                    disconnected.append(client)
+                    # Handle benign WebSocket disconnects quietly
+                    if (isinstance(exc, WebSocketDisconnect) and
+                            exc.code in (1000, 1001, 1006)):
+                        logger.debug(
+                            "Client disconnected during broadcast (code: %d)", exc.code
+                        )
+                    else:
+                        logger.exception("WS send err; sched disconnect")
             for client in disconnected:
                 if client in self.clients:
                     self.clients.remove(client)
@@ -570,9 +571,7 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                     ).model_dump_json()
                     await websocket.send_text(status_msg)
                 except (WebSocketDisconnect, OSError, RuntimeError):
-                    logger.exception(
-                        "Failed to send initial status snapshot"
-                    )
+                    logger.exception("Failed to send initial status snapshot")
 
                 # Send persisted metrics and logs one message at a time so the
                 # client can render the full history immediately.
@@ -628,9 +627,15 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                         exc,
                     )
         except (SQLAlchemyError, WebSocketDisconnect, OSError, RuntimeError) as exc:
-            logger.exception(
-                "Failed to catch up client with persisted run data: %s", exc
-            )
+            # Handle benign WebSocket disconnects quietly (normal browser close/reload)
+            if isinstance(exc, WebSocketDisconnect) and exc.code in (1000, 1001, 1006):
+                logger.info(
+                    "WebSocket client disconnected normally (code: %d)", exc.code
+                )
+            else:
+                logger.exception(
+                    "Failed to catch up client with persisted run data: %s", exc
+                )
 
         while True:
             data = await websocket.receive_text()

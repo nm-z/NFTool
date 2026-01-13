@@ -6,18 +6,19 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, cast as typing_cast
+from typing import Any
+from typing import cast as typing_cast
 
 from fastapi import Depends, FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-
 from src.auth import verify_api_key
 from src.config import API_KEY, LOGS_DIR, REPORTS_DIR, RESULTS_DIR
 from src.database.database import SESSION_LOCAL, Base, engine
 from src.database.models import Run
-from src.manager import manager as connection_manager, websocket_endpoint
+from src.manager import manager as connection_manager
+from src.manager import websocket_endpoint
 from src.routers import datasets, hardware, training
 from src.services.queue_instance import job_queue
 
@@ -154,7 +155,11 @@ async def api_key_middleware(request: Request, call_next: Any) -> Any:
                     methods = getattr(route, "methods", None)
                     if methods:
                         api_allowed_methods.update(m.upper() for m in methods)
-            if matched_any and request.method.upper() not in api_allowed_methods:
+            if (
+                matched_any
+                and request.method.upper() not in api_allowed_methods
+                and request.method.upper() != "OPTIONS"
+            ):
                 allow_header = ", ".join(sorted(api_allowed_methods)) or (
                     "GET, POST, OPTIONS"
                 )
@@ -198,4 +203,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8001)
-
