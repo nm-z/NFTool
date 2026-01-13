@@ -6,21 +6,18 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
-from typing import cast as typing_cast
+from typing import Any, cast as typing_cast
 
 from fastapi import Depends, FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.routing import Match
 
 from src.auth import verify_api_key
 from src.config import API_KEY, LOGS_DIR, REPORTS_DIR, RESULTS_DIR
-from src.database.database import Base, SessionLocal, engine
+from src.database.database import SESSION_LOCAL, Base, engine
 from src.database.models import Run
-from src.manager import manager as connection_manager
-from src.manager import websocket_endpoint
+from src.manager import manager as connection_manager, websocket_endpoint
 from src.routers import datasets, hardware, training
 from src.services.queue_instance import job_queue
 
@@ -52,7 +49,7 @@ async def lifespan(_app: FastAPI):
     del _hardware_monitor_task  # Explicitly delete to mark as "used" for linters
 
     # State Recovery: Mark any stuck 'running' jobs as 'failed'
-    with SessionLocal() as db:
+    with SESSION_LOCAL() as db:
         stuck_runs = db.query(Run).filter(Run.status == "running").all()
         for run in stuck_runs:
             # Cast to Any to satisfy static checkers before assigning runtime value.
@@ -97,7 +94,7 @@ app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
 
 @app.middleware("http")
-async def api_key_middleware(request: Request, call_next):
+async def api_key_middleware(request: Request, call_next: Any) -> Any:
     """
     Enforce presence of X-API-Key on all /api/v1 routes before body validation.
     Return 406 when missing or invalid to match test expectations.
@@ -120,10 +117,9 @@ async def api_key_middleware(request: Request, call_next):
     if request.method.upper() not in allowed_http_methods:
         # Compute allowed methods for this path to include in Allow header per RFC 9110
         try:
-            allowed_methods_set = set()
+            allowed_methods_set: set[str] = set()
             for route in request.app.router.routes:
-                match, _ = route.matches(request.scope)
-                if match != Match.NONE:
+                if route.matches(request.scope)[0] is not None:
                     methods = getattr(route, "methods", None)
                     if methods:
                         allowed_methods_set.update(m.upper() for m in methods)
@@ -150,17 +146,16 @@ async def api_key_middleware(request: Request, call_next):
     if path.startswith(("/api/v1/training", "/api/v1/data")):
         # If the route exists but does not allow this method, return 405 per RFC
         try:
-            allowed_methods_set = set()
+            api_allowed_methods: set[str] = set()
             matched_any = False
             for route in request.app.router.routes:
-                match, _ = route.matches(request.scope)
-                if match != Match.NONE:
+                if route.matches(request.scope)[0] is not None:
                     matched_any = True
                     methods = getattr(route, "methods", None)
                     if methods:
-                        allowed_methods_set.update(m.upper() for m in methods)
-            if matched_any and request.method.upper() not in allowed_methods_set:
-                allow_header = ", ".join(sorted(allowed_methods_set)) or (
+                        api_allowed_methods.update(m.upper() for m in methods)
+            if matched_any and request.method.upper() not in api_allowed_methods:
+                allow_header = ", ".join(sorted(api_allowed_methods)) or (
                     "GET, POST, OPTIONS"
                 )
                 return JSONResponse(
@@ -203,3 +198,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8001)
+

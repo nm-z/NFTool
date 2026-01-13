@@ -39,11 +39,11 @@ class HardwareMonitor:
     def _get_rocm_stats(self, gpu_id: int) -> dict[str, Any]:
         """Query ROCm (`rocm-smi`) and parse JSON output for the target GPU."""
 
-        def parse_rocm_json(output):
+        def parse_rocm_json(output: str):
             start = output.find("{")
             end = output.rfind("}")
             if start != -1 and end != -1:
-                return json.loads(output[start : end + 1])
+                return json.loads(output[start: end + 1])
             return None
 
         res_use = subprocess.run(

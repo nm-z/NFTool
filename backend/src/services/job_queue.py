@@ -8,10 +8,15 @@ from collections import deque
 from typing import Any, cast
 
 from sqlalchemy.orm import Session
-from src.database.database import SessionLocal
+from src.database.database import SESSION_LOCAL
 from src.database.models import Run
-from src.services.training_service import run_training_task
 from src.utils.broadcast_utils import db_log_and_broadcast
+
+# Remove this import to break the cycle
+# from src.services.training_service import run_training_task
+
+# Type aliases for clarity
+JobDict = dict[str, Any]
 
 logger = logging.getLogger("nftool")
 
@@ -20,8 +25,8 @@ class JobQueue:
     """Manage a FIFO queue of training jobs and run them in separate processes."""
 
     def __init__(self):
-        self.queue = deque()
-        self.active_job: dict[str, Any] | None = None
+        self.queue: deque[JobDict] = deque()
+        self.active_job: JobDict | None = None
         # Use a loose typing for the active process object coming from
         # multiprocessing contexts (ctx.Process). Static checkers can be
         # conservative here; accept any to avoid false-positive "cannot assign"
@@ -30,9 +35,9 @@ class JobQueue:
         self.queue_lock = asyncio.Lock()
         # Keep references to background tasks created via asyncio.create_task to
         # avoid dangling-task warnings and premature GC.
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[Any]] = []
 
-    async def add_job(self, config_dict: dict[str, Any], run_id: str):
+    async def add_job(self, config_dict: JobDict, run_id: str):
         """Add a training job to the FIFO queue.
 
         Updates the Run status to 'queued' in the database, broadcasts a
@@ -41,7 +46,7 @@ class JobQueue:
         """
         async with self.queue_lock:
             self.queue.append({"config": config_dict, "run_id": run_id})
-            db = SessionLocal()
+            db = SESSION_LOCAL()
             try:
                 run = db.query(Run).filter(Run.run_id == run_id).first()
                 if run:
@@ -89,6 +94,10 @@ class JobQueue:
         configures the manager state, spawns a process for `run_training_task`,
         and starts monitoring the process.
         """
+        # Import dynamically to avoid circular dependencies
+        run_training_task = importlib.import_module(
+            "src.services.training_service"
+        ).run_training_task
         async with self.queue_lock:
             if self.active_job:
                 return
@@ -96,12 +105,12 @@ class JobQueue:
                 logger.info("Job queue is empty.")
                 return
 
-            job = self.queue.popleft()
+            job: JobDict = self.queue.popleft()
             self.active_job = job
-            run_id = job["run_id"]
-            config_dict = job["config"]
+            run_id: str = job["run_id"]
+            config_dict: JobDict = job["config"]
 
-            db = SessionLocal()
+            db = SESSION_LOCAL()
             try:
                 run = db.query(Run).filter(Run.run_id == run_id).first()
                 if run:
@@ -169,7 +178,7 @@ class JobQueue:
             return
 
         finished_run_id = self.active_job.get("run_id")
-        db = SessionLocal()
+        db = SESSION_LOCAL()
         try:
             run = db.query(Run).filter(Run.run_id == finished_run_id).first()
             if run and cast(Any, run).status == "running":

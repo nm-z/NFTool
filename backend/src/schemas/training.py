@@ -7,6 +7,7 @@ ensure numeric fields are not provided as booleans and paths are safe.
 import logging
 import os
 from pathlib import Path
+from typing import Any, Self, cast
 
 from pydantic import BaseModel, Field, model_validator
 from src.config import REPO_ROOT, WORKSPACE_DIR
@@ -51,7 +52,7 @@ class TrainingConfig(BaseModel):
 
     @model_validator(mode="before")
     # Pydantic uses a class-style validator (cls, values) here.
-    def reject_boolean_numeric(self, values):
+    def reject_boolean_numeric(self, values: Any) -> Any:
         """Before-model validation: ensure booleans aren't used for numeric fields.
 
         Only inspect dict-like request bodies; other top-level types should be
@@ -94,10 +95,10 @@ class TrainingConfig(BaseModel):
                 raise ValueError(
                     f"Invalid type for {field_name}: boolean is not allowed"
                 )
-        return values
+        return cast(dict[str, Any], values)
 
     @model_validator(mode="after")
-    def validate_ratios_and_paths(self) -> "TrainingConfig":
+    def validate_ratios_and_paths(self) -> Self:
         """After-model validation: check numeric booleans, ratios, and paths."""
         # Reject boolean values for numeric fields (bool is a subclass of int in
         # Python)

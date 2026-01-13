@@ -6,7 +6,6 @@ a database session and ensures it is closed after use.
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-
 from src.config import DATABASE_URL
 
 Base = declarative_base()

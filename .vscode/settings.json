@@ -21,19 +21,15 @@
   "flake8.args": [
     "--max-line-length=88"
   ],
-
-"pylint.args": [
+  "pylint.args": [
     "--score=n",
     "--jobs=0",
-    "--enable=I0011,I0020",
-    // THE ULTIMATE BAN LIST
-    "--notes-rgx=(FIXME|TODO|ruff:.*noqa|type:.*ignore|pyright:.*)" 
+    "--enable=I0011,I0020,W0511",
+    "--notes-rgx=(FIXME|TODO|ruff:\\s*noqa|type:\\s*ignore|pyright:)"
   ],
-
   "pylint.severity": {
     "I0011": "Error",
     "I0020": "Error",
-    // 2. Force these notes (including the banned cheat) to be RED
     "W0511": "Error"
   },
   "pylint.interpreter": [
@@ -50,7 +46,6 @@
     "./backend"
   ],
   "sarif-viewer.connectToGithubCodeScanning": "off",
-
   "triggerTaskOnSave.tasks": {
     "1. Lint Dockerfiles (Hadolint)": [
       "**/Dockerfile*"
@@ -60,7 +55,6 @@
       "docker-compose.yml"
     ]
   },
-
   "files.readonlyInclude": {
     "**/pyrightconfig.json": true,
     "**/backend/pyproject.toml": true
