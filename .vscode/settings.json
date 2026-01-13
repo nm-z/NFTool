@@ -1,45 +1,47 @@
 {
-  // --- YOUR EXISTING PYTHON & TESTING SETUP ---
   "python.defaultInterpreterPath": "/home/nate/Desktop/NFTool/.venv/bin/python",
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
   "python.testing.cwd": "/home/nate/Desktop/NFTool",
   "python.testing.pytestArgs": [
-      "backend/tests",
-      "--cov=backend/src",
-      "--cov-branch"
+    "backend/tests",
+    "--cov=backend/src",
+    "--cov-branch"
   ],
   "python.envFile": "/home/nate/Desktop/NFTool/.env",
   "git.ignoreLimitWarning": true,
-
-  // --- NEW CONFIGURATION FOR PROBLEMS PANEL ---
-
-  // 1. ESLint (Frontend)
   "eslint.workingDirectories": [
     "./frontend"
   ],
-
-  // 2. RUFF (Backend) - FIXED
-  // 'ruff.lint.args' is deprecated. We use 'ruff.lint.select' array now.
   "ruff.lint.select": [
     "E", "F", "W", "I", "UP", "B", "SIM", "C4", "ISC", "RUF"
   ],
   "ruff.fixAll": true,
-  "ruff.organizeImports": true, 
-
-  // 3. FLAKE8 (Backend)
+  "ruff.organizeImports": true,
   "flake8.args": [
     "--max-line-length=88"
   ],
-
-  // 4. PYLINT (Backend)
   "pylint.args": [
     "--score=n",
-    "--jobs=0" 
+    "--jobs=0"
   ],
-
-  // 5. INTELLISENSE HELP
+  "hadolint.hadolintPath": "hadolint",
+  "hadolint.cliOptions": [
+    "--no-color"
+  ],
+  "hadolint.maxNumberOfProblems": 100,
+  "hadolint.outputLevel": "warning",
   "python.analysis.extraPaths": [
     "./backend"
-  ]
+  ],
+  "sarif-viewer.connectToGithubCodeScanning": "off",
+  "triggerTaskOnSave.tasks": {
+    "1. 🐳 Lint: Dockerfiles (Hadolint)": [
+      "**/Dockerfile*"
+    ],
+    "2. 🛡️ Scan: Config Security (Trivy)": [
+      "**/Dockerfile*",
+      "docker-compose.yml"
+    ]
+  }
 }

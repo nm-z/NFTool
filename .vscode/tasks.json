@@ -1,0 +1,70 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "1. Lint Dockerfiles (Hadolint)",
+      "type": "shell",
+      "command": "sh",
+      "args": [
+        "-c",
+        "hadolint -t style backend/Dockerfile.backend frontend/Dockerfile.frontend || true"
+      ],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "2. Scan Config Security (Trivy)",
+      "type": "shell",
+      "command": "trivy",
+      "args": [
+        "config",
+        "--format", "sarif",
+        "--output", "trivy-config.sarif",
+        "--exit-code", "0",
+        "."
+      ],
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "3. Scan Backend Image (SARIF)",
+      "type": "shell",
+      "command": "sh",
+      "options": {
+        "env": { "TMPDIR": "${workspaceFolder}/.tmp" }
+      },
+      "args": [
+        "-c",
+        "mkdir -p .tmp; trivy image --cache-dir .trivycache_be --scanners vuln --format sarif --output backend.sarif nftool-backend:latest; dockle --timeout 600s -f sarif -o backend-dockle.sarif nftool-backend:latest || true"
+      ],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "4. Scan Frontend Image (SARIF)",
+      "type": "shell",
+      "command": "sh",
+      "options": {
+        "env": { "TMPDIR": "${workspaceFolder}/.tmp" }
+      },
+      "args": [
+        "-c",
+        "mkdir -p .tmp; trivy image --cache-dir .trivycache_fe --scanners vuln --format sarif --output frontend.sarif nftool-frontend:latest; dockle -f sarif -o frontend-dockle.sarif nftool-frontend:latest || true"
+      ],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run ALL Checks (Parallel)",
+      "dependsOn": [
+        "1. Lint Dockerfiles (Hadolint)",
+        "2. Scan Config Security (Trivy)",
+        "3. Scan Backend Image (SARIF)",
+        "4. Scan Frontend Image (SARIF)"
+      ],
+      "problemMatcher": [],
+      "group": "test"
+    }
+  ]
+}
