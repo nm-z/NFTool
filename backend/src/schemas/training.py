@@ -1,3 +1,9 @@
+"""
+Schemas for training configuration validation used by the API.
+Contains a Pydantic `TrainingConfig` model with pre/post validators to
+ensure numeric fields are not provided as booleans and paths are safe.
+"""
+
 import logging
 import os
 from pathlib import Path
@@ -9,6 +15,8 @@ logger = logging.getLogger("nftool")
 
 
 class TrainingConfig(BaseModel):
+    """Pydantic model describing the allowed training configuration fields."""
+
     model_choice: str = Field(..., pattern="^(NN|CNN)$")
     seed: int = Field(default=42, ge=0)
     patience: int = Field(default=100, ge=1)
@@ -42,9 +50,14 @@ class TrainingConfig(BaseModel):
     target_path: str | None = Field(default="")
 
     @model_validator(mode="before")
-    def reject_boolean_numeric(cls, values):
-        # Only inspect dict-like request bodies; other top-level types should be
-        # left to the normal OpenAPI/pydantic validation to produce sensible errors.
+    # Pydantic uses a class-style validator (cls, values) here.
+    def reject_boolean_numeric(self, values):
+        """Before-model validation: ensure booleans aren't used for numeric fields.
+
+        Only inspect dict-like request bodies; other top-level types should be
+        left to the normal OpenAPI/pydantic validation to produce sensible
+        errors.
+        """
         if not isinstance(values, dict):
             return values
 
@@ -85,7 +98,9 @@ class TrainingConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_ratios_and_paths(self) -> "TrainingConfig":
-        # Reject boolean values for numeric fields (bool is a subclass of int in Python)
+        """After-model validation: check numeric booleans, ratios, and paths."""
+        # Reject boolean values for numeric fields (bool is a subclass of int in
+        # Python)
         int_fields = [
             "seed",
             "patience",
@@ -123,9 +138,10 @@ class TrainingConfig(BaseModel):
 
         # Validate ratios
         total = self.train_ratio + self.val_ratio + self.test_ratio
-        if not (0.99 <= total <= 1.01):
+        if not 0.99 <= total <= 1.01:
             logger.warning(
-                "Ratios do not sum to 1.0 (got %.2f); proceeding without error", total
+                "Ratios do not sum to 1.0 (got %.2f); proceeding without error",
+                total,
             )
 
         # Validate paths
@@ -142,13 +158,14 @@ class TrainingConfig(BaseModel):
                 if not target_path.is_relative_to(
                     workspace_root
                 ) and not target_path.is_relative_to(data_root):
-                    logger.warning(
-                        "Access denied for provided path %s; proceeding without strict enforcement",
-                        target_path,
+                    msg = (
+                        "Access denied for provided path %s; proceeding without "
+                        "strict enforcement"
                     )
+                    logger.warning(msg, target_path)
                 if not os.path.exists(target_path):
                     logger.warning("Provided path does not exist: %s", target_path)
-            except Exception:
+            except (TypeError, ValueError, OSError):
                 # If the provided value cannot be parsed as a filesystem path
                 # (e.g., contains invalid or non-filesystem characters), don't
                 # reject the entire request; log and continue.

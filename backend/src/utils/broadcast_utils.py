@@ -1,7 +1,8 @@
+"""Utilities to persist and broadcast log/telemetry messages to WebSocket and DB."""
+
 import logging
 from datetime import UTC, datetime
-from typing import Any, Protocol
-from typing import cast as typing_cast
+from typing import Any, Protocol, cast
 
 from sqlalchemy.orm import Session
 
@@ -10,9 +11,15 @@ from src.schemas.websocket import LogMessage, TelemetryMessage
 
 
 class ConnectionBroadcaster(Protocol):
-    def broadcast_sync(self, message: TelemetryMessage) -> None: ...
+    """Protocol describing a connection manager capable of broadcasting messages."""
 
-    async def broadcast(self, message: TelemetryMessage) -> None: ...
+    def broadcast_sync(self, message: TelemetryMessage) -> None:
+        """Synchronously broadcast a TelemetryMessage to all connected clients."""
+        raise NotImplementedError
+
+    async def broadcast(self, message: TelemetryMessage) -> None:
+        """Asynchronously broadcast a TelemetryMessage to all connected clients."""
+        raise NotImplementedError
 
 
 logger = logging.getLogger("nftool")
@@ -33,7 +40,7 @@ def db_log_and_broadcast(
     if run:
         current_logs = list(getattr(run, "logs", []) or [])
         current_logs.append(log_entry.model_dump())
-        typing_cast(Any, run).logs = current_logs
+        cast(Any, run).logs = current_logs
         db.commit()
     # Broadcast a structured Pydantic model
     connection_manager.broadcast_sync(TelemetryMessage(type="log", data=log_entry))

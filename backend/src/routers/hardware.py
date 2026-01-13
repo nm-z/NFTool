@@ -1,3 +1,9 @@
+"""Hardware router exposing endpoints for system/GPU capabilities.
+
+This module provides lightweight endpoints used by the API to inspect
+CUDA availability and device properties.
+"""
+
 import torch
 from fastapi import APIRouter
 
@@ -8,6 +14,11 @@ __all__ = ["get_hardware_capabilities", "health_check", "list_gpus", "router"]
 
 @router.get("/gpus")
 def list_gpus():
+    """Return a list of available CUDA GPUs.
+
+    Each item contains `id`, `name`, and `is_available`. Returns an empty
+    list when CUDA is not available.
+    """
     return (
         [
             {"id": i, "name": torch.cuda.get_device_name(i), "is_available": True}
@@ -20,6 +31,11 @@ def list_gpus():
 
 @router.get("/health")
 def health_check():
+    """Return a simple health status for the service.
+
+    Includes overall status, whether a GPU is available, and the active
+    device name.
+    """
     return {
         "status": "ok",
         "gpu": torch.cuda.is_available(),
@@ -29,6 +45,12 @@ def health_check():
 
 @router.get("/capabilities")
 def get_hardware_capabilities():
+    """Return detailed hardware capabilities when CUDA is available.
+
+    For CUDA devices this includes device name, total memory (GB),
+    compute capability, FP16/BF16 support and driver version. For CPU-only
+    systems returns defaults indicating CUDA is unavailable.
+    """
     if torch.cuda.is_available():
         device_id = 0  # Assuming single GPU for simplicity, or can iterate
         properties = torch.cuda.get_device_properties(device_id)

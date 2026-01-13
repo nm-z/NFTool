@@ -23,8 +23,17 @@
   ],
   "pylint.args": [
     "--score=n",
-    "--jobs=0"
+    "--jobs=0",
+    "--enable=I0011,I0020"
   ],
+  "pylint.severity": {
+    "I0011": "Error",
+    "I0020": "Error"
+  },
+  "pylint.interpreter": [
+    "${workspaceFolder}/.venv/bin/python"
+  ],
+  "pylint.importStrategy": "fromEnvironment",
   "hadolint.hadolintPath": "hadolint",
   "hadolint.cliOptions": [
     "--no-color"
@@ -35,11 +44,12 @@
     "./backend"
   ],
   "sarif-viewer.connectToGithubCodeScanning": "off",
+  
   "triggerTaskOnSave.tasks": {
-    "1. 🐳 Lint: Dockerfiles (Hadolint)": [
+    "1. Lint Dockerfiles (Hadolint)": [
       "**/Dockerfile*"
     ],
-    "2. 🛡️ Scan: Config Security (Trivy)": [
+    "2. Scan Config Security (Trivy)": [
       "**/Dockerfile*",
       "docker-compose.yml"
     ]

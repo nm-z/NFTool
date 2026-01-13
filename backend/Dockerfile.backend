@@ -1,19 +1,22 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-
 # Install system dependencies for ROCm and SMI
-RUN apt-get update && apt-get install -y \
+# Switch back to root to install packages
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg2 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv via pip
-RUN pip install uv
-
-# Copy requirements and install
+# Copy requirements and install (install from pinned requirements)
 COPY requirements.txt .
-RUN uv pip install --system --extra-index-url https://download.pytorch.org/whl/rocm6.2 -r requirements.txt
+RUN uv pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/rocm6.2 -r requirements.txt \
+    && uv pip install --no-cache-dir pylint pylint-pydantic
+
 
 # Copy source code
 COPY . .
@@ -22,9 +25,16 @@ COPY . .
 ENV REPO_ROOT=/app
 ENV WORKSPACE_DIR=/app/workspace
 ENV PYTHONPATH=/app
+# Create a non-system, non-root user with explicit UID/GID and set permissions
+RUN groupadd --gid 1000 app || true \
+  && useradd --uid 1000 --gid 1000 -m -d /app -s /sbin/nologin app || true \
+  && chown -R app:app /app
+USER app
 
 EXPOSE 8001
 
-# Run the application
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s CMD curl -f http://127.0.0.1:8001/health || exit 1
+
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8001"]
 

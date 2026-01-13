@@ -41,16 +41,36 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
             headers: { "X-API-Key": API_KEY },
           },
         );
+
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.detail || `Preview failed: ${res.status}`);
+          // Try to parse JSON error body, otherwise fall back to text or status
+          let errText = `Preview failed: ${res.status}`;
+          try {
+            const errBody = await res.json();
+            if (errBody && (errBody.detail || errBody.message)) {
+              errText = String(errBody.detail || errBody.message);
+            } else if (typeof errBody === "string" && errBody) {
+              errText = errBody;
+            }
+          } catch {
+            // Not JSON — try text
+            const textBody = await res.text().catch(() => "");
+            if (textBody) errText = textBody;
+          }
+
+          // Surface friendly message in UI instead of throwing (avoids console stack traces)
+          setError(errText);
+          setPreviewData(null);
+          return;
         }
+
         const data = await res.json();
         setPreviewData(data);
       } catch (e: unknown) {
-        console.error("Failed to load preview:", e);
+        // Log minimal info for debugging and show a friendly message to the user
         const msg = e instanceof Error ? e.message : String(e);
-        setError(msg);
+        console.error("Failed to load preview:", msg);
+        setError(msg || "Failed to load preview");
       } finally {
         setLoading(false);
       }
@@ -115,7 +135,14 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-3 text-red-400 text-[11px] font-medium">
           <AlertCircle size={14} />
-          <span>{error}</span>
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => loadPreview(filePath)}
+            disabled={loading}
+            className="px-3 py-1 rounded text-[11px] font-medium bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50"
+          >
+            Retry
+          </button>
         </div>
       )}
 

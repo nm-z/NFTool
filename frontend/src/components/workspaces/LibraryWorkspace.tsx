@@ -176,7 +176,16 @@ function RunDetailView({
       a.href = url;
       a.download = `${run.run_id}_weights.pt`;
       document.body.appendChild(a);
-      a.click();
+      // Attempt a direct click; if the environment blocks programmatic clicks,
+      // dispatch a synthetic MouseEvent as a fallback. The outer try/catch will
+      // capture any errors and log them.
+      try {
+        a.click();
+      } catch {
+        a.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, view: window }),
+        );
+      }
       a.remove();
       addLog({
         time: new Date().toLocaleTimeString(),

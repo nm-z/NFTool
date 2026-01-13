@@ -12,7 +12,8 @@ import logging
 import os
 import subprocess
 import sys
-from typing import Any, Optional
+from importlib import import_module
+from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import SQLAlchemyError
@@ -51,7 +52,8 @@ class ConnectionManager:
     """
 
     def __init__(self):
-        # Don't inject bogus/placeholder stats. Only store obtained or actually measured stats.
+        # Don't inject bogus/placeholder stats.
+        # Only store obtained or actually measured stats.
         self.clients: list[WebSocket] = []
         self.client_lock = asyncio.Lock()
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -63,8 +65,9 @@ class ConnectionManager:
             "checkpoint_id": {},
         }
 
-        # Initialize the monitor and probe hardware immediately. If probing fails,
-        # abort startup so the application fails loudly rather than reporting fake stats.
+        # Initialize the monitor and probe hardware immediately.
+        # If probing fails, abort startup so the application fails loudly rather
+        # than reporting fake stats.
         self.monitor = HardwareMonitor()
         try:
             gpu_stats = self.monitor.get_gpu_stats(0)
@@ -81,7 +84,10 @@ class ConnectionManager:
             raise RuntimeError("Hardware probe failed during startup") from exc
 
         # Require actual measured values; do not fabricate defaults.
-        self._tracking["hardware_stats"] = {**(gpu_stats or {}), **(system_stats or {})}
+        self._tracking["hardware_stats"] = {
+            **(gpu_stats or {}),
+            **(system_stats or {}),
+        }
         self.active_run_id: str | None = None
         # Track how many metrics/logs have been forwarded for a given run so
         # we only broadcast new items observed in the DB (useful when the
@@ -278,7 +284,8 @@ class ConnectionManager:
         - hardware stats polling at a configurable interval,
         - DB polling for the active run to forward new metrics/logs/status/checkpoints.
         """
-        from src.services.queue_instance import job_queue  # local import to avoid cycle
+        # Resolve job_queue at runtime to avoid a circular import.
+        job_queue = import_module("src.services.queue_instance").job_queue
 
         while True:
             if not self.clients:
@@ -337,6 +344,13 @@ class ConnectionManager:
                     current_trial = int(getattr(run, "current_trial", 0) or 0)
                     if total_trials > 0 and current_trial > total_trials:
                         current_trial = total_trials
+                    # Include queue snapshot so the UI process monitor has a
+                    # consistent payload shape across status broadcasts.
+                    q_status = (
+                        job_queue.get_status()
+                        if "job_queue" in locals()
+                        else {"queue_size": 0, "active_job_id": None}
+                    )
                     status_snapshot = {
                         "is_running": getattr(run, "status", None) == "running",
                         "progress": int(getattr(run, "progress", 0) or 0),
@@ -346,6 +360,8 @@ class ConnectionManager:
                         "result": {
                             "best_r2": float(getattr(run, "best_r2", 0.0) or 0.0)
                         },
+                        "queue_size": q_status.get("queue_size", 0),
+                        "active_job_id": q_status.get("active_job_id"),
                     }
                     last_status = self._tracking["status"].get(self.active_run_id)
                     if last_status != status_snapshot:
@@ -353,7 +369,8 @@ class ConnectionManager:
                         await self.broadcast(s_tm)
                         self._tracking["status"][self.active_run_id] = status_snapshot
 
-                    # Also forward any newly created ModelCheckpoint rows as metric points
+                    # Also forward any newly created ModelCheckpoint rows as
+                    # metric points
                     try:
                         ckpts = (
                             db.query(ModelCheckpoint)
@@ -397,7 +414,8 @@ class ConnectionManager:
                                 await self.broadcast(ck_tm)
                             except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                                 logger.exception(
-                                    "Failed to forward checkpoint-based metric: %s", exc
+                                    "Failed to forward checkpoint-based metric: %s",
+                                    exc,
                                 )
                             last_ck = max(last_ck, int(getattr(ck, "id", last_ck)))
                         self._tracking["checkpoint_id"][self.active_run_id] = last_ck
@@ -442,7 +460,7 @@ class ConnectionManager:
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     # Mark client as disconnected; cleanup after attempting all sends
                     logger.exception(
-                        "Error sending websocket message to client; scheduling removal: %s",
+                        "Error sending websocket message; scheduling removal: %s",
                         exc,
                     )
                     disconnected.append(client)
@@ -455,11 +473,29 @@ class ConnectionManager:
         if self.loop:
             asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
+    def set_metrics_index(self, run_id: str, index: int) -> None:
+        """Set the persisted metrics index for a run (thread-safe-ish helper)."""
+        if not run_id:
+            return
+        self._tracking.setdefault("metrics_index", {})[run_id] = int(index or 0)
+
+    def set_logs_index(self, run_id: str, index: int) -> None:
+        """Set the persisted logs index for a run (thread-safe-ish helper)."""
+        if not run_id:
+            return
+        self._tracking.setdefault("logs_index", {})[run_id] = int(index or 0)
+
 
 manager = ConnectionManager()
 
 
 async def websocket_endpoint(websocket: WebSocket, api_key: str):
+    """WebSocket entrypoint for UI clients.
+
+    Accepts incoming websocket connections, performs API key subprotocol
+    validation, primes the client with persisted run state (metrics/logs/status),
+    and then proxies incoming messages (simple ping/pong).
+    """
     protocols = websocket.headers.get("Sec-WebSocket-Protocol", "").split(",")
     client_api_key = next(
         (
@@ -478,10 +514,12 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
     await manager.connect(websocket, client_api_key)
     manager.set_loop(asyncio.get_event_loop())
 
-    # Use context manager for DB session; allow exceptions to propagate, but ensure disconnect in finally.
+    # Use context manager for DB session.
+    # Allow exceptions to propagate but ensure disconnect in finally.
     db = SessionLocal()
     try:
         # For an empty initial UI, send basic init first.
+        # (This primes the client with a minimal status payload.)
         init_data = StatusData(
             is_running=False,
             progress=0,
@@ -494,10 +532,14 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
             queue_size=0,
             active_job_id=None,
         )
-        init_msg = TelemetryMessage(type="init", data=init_data).model_dump_json()
+        init_msg = TelemetryMessage(
+            type="init",
+            data=init_data,
+        ).model_dump_json()
         await websocket.send_text(init_msg)
 
-        # Immediately catch the client up with any persisted run state (if a run exists).
+        # Immediately catch the client up with any persisted run state.
+        # (If a run exists, send its latest persisted state.)
         try:
             latest_run = db.query(Run).order_by(Run.id.desc()).first()
             if latest_run:
@@ -506,7 +548,8 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                 metrics = list(getattr(latest_run, "metrics_history", []) or [])
                 logs = list(getattr(latest_run, "logs", []) or [])
 
-                # If there's an active/running job, ensure the manager polls it for new updates.
+                # If there's an active/running job, ensure the manager polls it
+                # for new updates.
                 if status_val == "running":
                     manager.active_run_id = run_id
 
@@ -537,18 +580,19 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                         },
                     }
                     status_msg = TelemetryMessage(
-                        type="status", data=status_snapshot
+                        type="status",
+                        data=status_snapshot,
                     ).model_dump_json()
                     await websocket.send_text(status_msg)
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     logger.exception(
-                        "Failed to send initial status snapshot to websocket client: %s",
+                        "Failed to send initial status snapshot: %s",
                         exc,
                     )
 
-                # Send persisted metrics and logs (one message per item) so client can render
-                # the full history immediately. Mark indexes so the manager doesn't forward
-                # duplicates later.
+                # Send persisted metrics and logs one message at a time so the
+                # client can render the full history immediately.
+                # Mark indexes so the manager doesn't forward duplicates later.
                 try:
                     for m in metrics:
                         try:
@@ -564,13 +608,15 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                             RuntimeError,
                         ) as exc:
                             logger.exception(
-                                "Failed to send persisted metric to client: %s", exc
+                                "Failed to send persisted metric to client: %s",
+                                exc,
                             )
                     if run_id:
-                        manager._tracking["metrics_index"][run_id] = len(metrics)
+                        manager.set_metrics_index(run_id, len(metrics))
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     logger.exception(
-                        "Failed to send persisted metrics to websocket client: %s", exc
+                        "Failed to send persisted metrics to websocket client: %s",
+                        exc,
                     )
 
                 try:
@@ -588,13 +634,15 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                             RuntimeError,
                         ) as exc:
                             logger.exception(
-                                "Failed to send persisted log to client: %s", exc
+                                "Failed to send persisted log to client: %s",
+                                exc,
                             )
                     if run_id:
-                        manager._tracking["logs_index"][run_id] = len(logs)
+                        manager.set_logs_index(run_id, len(logs))
                 except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                     logger.exception(
-                        "Failed to send persisted logs to websocket client: %s", exc
+                        "Failed to send persisted logs to websocket client: %s",
+                        exc,
                     )
         except (SQLAlchemyError, WebSocketDisconnect, OSError, RuntimeError) as exc:
             logger.exception(

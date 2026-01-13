@@ -1,3 +1,6 @@
+"""Dataset router endpoints for listing and previewing CSV datasets."""
+
+import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +11,11 @@ from src.data.processing import load_dataset
 router = APIRouter()
 
 __all__ = ["list_datasets", "preview_dataset", "router"]
+
+# Avoid calling Depends(...) in function defaults to satisfy the linter.
+# Create a module-level dependency object and use an "unused" parameter name.
+VERIFY_API_KEY_DEP = Depends(verify_api_key)
+logger = logging.getLogger("nftool.datasets")
 
 
 def _ensure_list_like(value):
@@ -28,7 +36,8 @@ def _ensure_list_like(value):
         406: {"description": "Missing or invalid API key"},
     },
 )
-def list_datasets(api_key: str = Depends(verify_api_key)):
+def list_datasets(_api_key: str = VERIFY_API_KEY_DEP):
+    """Return a list of CSV datasets under the repository `data/` directory."""
     dataset_dir = os.path.join(REPO_ROOT, "data")
     if not os.path.exists(dataset_dir):
         return []
@@ -48,10 +57,28 @@ def list_datasets(api_key: str = Depends(verify_api_key)):
     },
 )
 async def preview_dataset(
-    path: str, rows: int = 10, api_key: str = Depends(verify_api_key)
+    path: str, rows: int = 10, _api_key: str = VERIFY_API_KEY_DEP
 ):
-    target = path
+    """Return a small preview and basic statistics for the dataset at `path`."""
+    # Resolve relative paths against the repository root so clients can pass
+    # paths like "data/myfile.csv". If an absolute path is provided, use it.
+    if os.path.isabs(path):
+        target = os.path.normpath(path)
+    else:
+        target = os.path.normpath(os.path.join(REPO_ROOT, path))
+
+    # Prevent directory traversal by ensuring the resolved path is under REPO_ROOT
+    common = os.path.commonpath([REPO_ROOT, target])
+    if common != os.path.normpath(REPO_ROOT):
+        logger.warning(
+            "Invalid dataset preview path attempt: %s (resolved: %s)",
+            path,
+            target,
+        )
+        raise HTTPException(status_code=400, detail="Invalid path")
+
     if not os.path.exists(target) or not os.path.isfile(target):
+        logger.warning("Dataset preview file not found: %s", target)
         raise HTTPException(status_code=404, detail="File not found")
 
     df = load_dataset(target)

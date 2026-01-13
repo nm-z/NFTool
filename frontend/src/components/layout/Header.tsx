@@ -199,13 +199,17 @@ export function Header({
         <IconButton
           icon={FolderOpen}
           onClick={() => {
-            // Open visible modal for upload (preferred) to avoid native file dialog restrictions in headless environments.
-            setIsUploadOpen(true);
-            // Also trigger the hidden input for standard browsers.
-            try {
-              fileInputRef.current?.click();
-            } catch {
-              // ignore
+            // Prefer the native file chooser by triggering the hidden file input.
+            // Fall back to the visible modal when the input ref is not available.
+            if (fileInputRef.current) {
+              try {
+                fileInputRef.current.click();
+              } catch {
+                // If programmatic click is blocked, open the visible modal as fallback.
+                setIsUploadOpen(true);
+              }
+            } else {
+              setIsUploadOpen(true);
             }
           }}
           tooltip="Load Weights"

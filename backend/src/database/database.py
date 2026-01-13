@@ -1,3 +1,9 @@
+"""Database session and engine setup.
+
+Provides SQLAlchemy engine, base model, and a `get_db` generator that yields
+a database session and ensures it is closed after use.
+"""
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -12,11 +18,12 @@ engine = create_engine(
     max_overflow=10,
     pool_timeout=60,
 )
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SESSION_LOCAL = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
-    db = SessionLocal()
+    """Yield a database session and ensure it is closed afterwards."""
+    db = SESSION_LOCAL()
     try:
         yield db
     finally:

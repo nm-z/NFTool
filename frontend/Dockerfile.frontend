@@ -2,19 +2,33 @@ FROM node:20-slim
 
 WORKDIR /app
 
+# Create a non-root user
+RUN groupadd --gid 1001 appuser || true \
+  && adduser --disabled-password --gecos '' --uid 1001 --gid 1001 appuser || true
+
+# Ensure /app is owned by appuser for npm install
+RUN chown -R appuser:appuser /app
+
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY --chown=appuser:appuser package.json package-lock.json* ./
 
-# Install dependencies with legacy peer deps
-RUN npm install --legacy-peer-deps
 
-# Copy source code
-COPY . .
+# Ensure package files owned by appuser so npm can write node_modules
+
+COPY --chown=appuser:appuser . .
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+ CMD ["node", "-e", "require('http').get('http://127.0.0.1:3000', res => { if (res.statusCode >= 200 && res.statusCode < 400) process.exit(0); else process.exit(1); }).on('error', () => process.exit(1))"]
 
 EXPOSE 3000
 
 # Docker signal to handle graceful shutdown
 STOPSIGNAL SIGTERM
 
+
 # Run in development mode
+# Run as non-root user (improves container security)
+# Use explicit username which scanners commonly detect
+USER appuser
+USER appuser
 CMD ["npm", "run", "dev"]

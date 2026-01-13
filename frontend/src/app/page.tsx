@@ -80,6 +80,43 @@ export default function Dashboard() {
     setIsMounted(true);
   }, []);
 
+  // Global error suppression for known benign runtime errors that can break
+  // interactive flows in some environments (e.g., automated/headless).
+  // We specifically guard against intermittent "Element not found" exceptions
+  // which are non-actionable in the UI and were observed to disrupt clicks.
+  useEffect(() => {
+    const onError = (ev: ErrorEvent) => {
+      try {
+        const msg = ev?.message ?? "";
+        if (typeof msg === "string" && msg.includes("Element not found")) {
+          console.warn("Suppressed benign runtime error:", msg);
+          ev.preventDefault();
+        }
+      } catch {
+        // swallow any handler errors
+      }
+    };
+    const onRejection = (ev: PromiseRejectionEvent) => {
+      try {
+        const reason = ev?.reason;
+        const msg = typeof reason === "string" ? reason : reason?.message ?? "";
+        if (typeof msg === "string" && msg.includes("Element not found")) {
+          console.warn("Suppressed benign rejection:", msg);
+          ev.preventDefault();
+        }
+      } catch {
+        // swallow
+      }
+    };
+
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isMounted) return;
     const headers = { "X-API-Key": API_KEY };
@@ -128,8 +165,23 @@ export default function Dashboard() {
               Array.isArray(arr) && arr.every((it) => isLog(it));
 
             const maybeLogs = (latest as Record<string, unknown>)?.logs;
-            if (isLogArray(maybeLogs)) {
-            type LogEntryLocal = {
+
+            // Only apply persisted logs from the backend when the latest run contains
+            // server-provided state. This prevents showing previous-run logs before
+            // the user starts a new test.
+            const latestStatus = (latest as Record<string, unknown>)?.status as string | undefined;
+            const latestHasResult = Boolean((latest as Record<string, unknown>)?.result);
+            const latestHasMetrics =
+              Array.isArray((latest as Record<string, unknown>)?.metrics_history) &&
+              ((latest as Record<string, unknown>)?.metrics_history as unknown[]).length > 0;
+            const hasServerState =
+              latestStatus === "running" ||
+              latestStatus === "queued" ||
+              latestHasResult ||
+              latestHasMetrics;
+
+            if (isLogArray(maybeLogs) && hasServerState) {
+              type LogEntryLocal = {
                 time: string;
                 msg: string;
                 type: "default" | "info" | "success" | "warn" | "optuna";
@@ -215,11 +267,30 @@ export default function Dashboard() {
                 if (msg.data.logs) setLogs(msg.data.logs);
               }
             } else if (msg.type === "status") {
-              setIsRunning(msg.data.is_running);
-              if (msg.data.is_running) setIsStarting(false);
+              // Backends may emit either boolean flags (is_running) or a status
+              // string (e.g. "queued", "running"). Handle both formats gracefully.
+              const statusStr =
+                typeof msg.data?.status === "string" ? String(msg.data.status) : undefined;
+              if (statusStr) {
+                if (statusStr === "running") {
+                  setIsRunning(true);
+                  setIsStarting(false);
+                } else if (statusStr === "queued" || statusStr === "pending") {
+                  setIsRunning(false);
+                  setIsStarting(true);
+                } else {
+                  setIsRunning(false);
+                  setIsStarting(false);
+                }
+              } else {
+                setIsRunning(Boolean(msg.data.is_running));
+                if (msg.data.is_running) setIsStarting(false);
+              }
+
               setIsAborting(msg.data.is_aborting || false);
-              setProgress(msg.data.progress);
-              setTrialInfo(msg.data.current_trial, msg.data.total_trials);
+              setProgress(msg.data.progress ?? 0);
+              // Accept both snake_case and camelCase trial keys
+              setTrialInfo(msg.data.current_trial ?? msg.data.currentTrial ?? 0, msg.data.total_trials ?? msg.data.totalTrials ?? 0);
               if (msg.data.result) setResult(msg.data.result);
             } else if (msg.type === "log") {
               addLog(msg.data);

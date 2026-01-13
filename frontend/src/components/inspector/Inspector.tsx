@@ -137,13 +137,25 @@ export function Inspector({
                     </label>
                     <div className="grid grid-cols-2 bg-zinc-900 border border-zinc-800 rounded p-0.5">
                       <button
-                        onClick={() => setModelType("NN")}
+                        onClick={() => {
+                          try {
+                            setModelType("NN");
+                          } catch (err) {
+                            console.warn("Failed to set model type NN:", err);
+                          }
+                        }}
                         className={`py-1 rounded text-[10px] font-bold transition-all ${modelType === "NN" ? "bg-zinc-800 text-white" : "text-zinc-500"}`}
                       >
                         NN
                       </button>
                       <button
-                        onClick={() => setModelType("CNN")}
+                        onClick={() => {
+                          try {
+                            setModelType("CNN");
+                          } catch (err) {
+                            console.warn("Failed to set model type CNN:", err);
+                          }
+                        }}
                         className={`py-1 rounded text-[10px] font-bold transition-all ${modelType === "CNN" ? "bg-zinc-800 text-white" : "text-zinc-500"}`}
                       >
                         CNN

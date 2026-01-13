@@ -1,3 +1,5 @@
+"""Main entry point for the NFTool backend API."""
+
 import asyncio
 import logging
 import os
@@ -11,20 +13,12 @@ from fastapi import Depends, FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Match
 
-# Local Imports
-from src.config import (
-    API_KEY,
-    LOGS_DIR,
-    REPORTS_DIR,
-    RESULTS_DIR,
-)
-from src.database.database import (  # Import Base from database.py now
-    Base,
-    SessionLocal,
-    engine,
-)
-from src.database.models import Run  # Need to import Run for startup_event
+from src.auth import verify_api_key
+from src.config import API_KEY, LOGS_DIR, REPORTS_DIR, RESULTS_DIR
+from src.database.database import Base, SessionLocal, engine
+from src.database.models import Run
 from src.manager import manager as connection_manager
 from src.manager import websocket_endpoint
 from src.routers import datasets, hardware, training
@@ -43,19 +37,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nftool")
 
-
 # Initialize database (create tables)
 Base.metadata.create_all(bind=engine)
 
 
-from src.auth import verify_api_key
-
-
 # Use lifespan handler instead of deprecated on_event startup
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
+    """Context manager for managing the lifespan of the FastAPI application."""
     # Startup actions
-    asyncio.create_task(connection_manager.hardware_monitor_task())
+    _hardware_monitor_task = asyncio.create_task(
+        connection_manager.hardware_monitor_task()
+    )
+    del _hardware_monitor_task  # Explicitly delete to mark as "used" for linters
 
     # State Recovery: Mark any stuck 'running' jobs as 'failed'
     with SessionLocal() as db:
@@ -67,14 +61,15 @@ async def lifespan(app: FastAPI):
                 {
                     "time": datetime.now().strftime("%H:%M:%S"),
                     "msg": "Run marked as failed due to API restart.",
-                    "type": "warn",
                 }
             )
             logger.warning(
-                f"Run {run.run_id} was stuck in 'running' status, marked as 'failed'."
+                "Run %s was stuck in 'running' status, marked as 'failed'.",
+                run.run_id,
             )
         db.commit()
-    asyncio.create_task(job_queue.process_queue())
+    _job_queue_task = asyncio.create_task(job_queue.process_queue())
+    del _job_queue_task  # Explicitly delete to mark as "used" for linters
 
     try:
         yield
@@ -110,7 +105,8 @@ async def api_key_middleware(request: Request, call_next):
     # Only enforce for API routes under /api/v1
     try:
         path = request.url.path or ""
-    except Exception:
+    except (AttributeError, ValueError) as e:
+        logger.error("Error determining request path: %s", e)
         path = ""
     logger.debug(
         "Incoming request: method=%s path=%s headers=%s",
@@ -124,8 +120,6 @@ async def api_key_middleware(request: Request, call_next):
     if request.method.upper() not in allowed_http_methods:
         # Compute allowed methods for this path to include in Allow header per RFC 9110
         try:
-            from starlette.routing import Match
-
             allowed_methods_set = set()
             for route in request.app.router.routes:
                 match, _ = route.matches(request.scope)
@@ -136,7 +130,15 @@ async def api_key_middleware(request: Request, call_next):
             allow_header = ", ".join(sorted(allowed_methods_set)) or ", ".join(
                 sorted(allowed_http_methods)
             )
-        except Exception:
+        except ImportError:
+            # Handle cases where starlette.routing.Match might not be available
+            logger.warning(
+                "Could not import starlette.routing.Match; dynamic method "
+                "calculation limited."
+            )
+            allow_header = ", ".join(sorted(allowed_http_methods))
+        except (AttributeError, RuntimeError, TypeError) as e:
+            logger.error("Error determining allowed methods: %s", e)
             allow_header = ", ".join(sorted(allowed_http_methods))
         return JSONResponse(
             status_code=405,
@@ -148,8 +150,6 @@ async def api_key_middleware(request: Request, call_next):
     if path.startswith(("/api/v1/training", "/api/v1/data")):
         # If the route exists but does not allow this method, return 405 per RFC
         try:
-            from starlette.routing import Match
-
             allowed_methods_set = set()
             matched_any = False
             for route in request.app.router.routes:
@@ -160,17 +160,21 @@ async def api_key_middleware(request: Request, call_next):
                     if methods:
                         allowed_methods_set.update(m.upper() for m in methods)
             if matched_any and request.method.upper() not in allowed_methods_set:
-                allow_header = (
-                    ", ".join(sorted(allowed_methods_set)) or "GET, POST, OPTIONS"
+                allow_header = ", ".join(sorted(allowed_methods_set)) or (
+                    "GET, POST, OPTIONS"
                 )
                 return JSONResponse(
                     status_code=405,
                     content={"detail": "Method Not Allowed"},
                     headers={"Allow": allow_header},
                 )
-        except Exception:
-            # If router inspection fails, fall back to header checks below.
-            pass
+        except ImportError:
+            logger.warning(
+                "Could not import starlette.routing.Match; dynamic method "
+                "calculation limited."
+            )
+        except (AttributeError, RuntimeError, TypeError) as e:
+            logger.error("Error determining allowed methods for API routes: %s", e)
         # Do not enforce API key at middleware level; route-level dependencies
         # handle authentication/validation. Middleware only enforces unsupported
         # methods (405) above and otherwise forwards to route handlers.
@@ -188,6 +192,7 @@ app.include_router(hardware.router, prefix="/api/v1")
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time communication."""
     await websocket_endpoint(websocket, API_KEY)
 
 

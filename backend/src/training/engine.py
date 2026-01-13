@@ -1,3 +1,11 @@
+"""Training engine utilities for model training and Optuna optimization.
+
+This module provides:
+- `train_model` and `train_cnn_model` training loops for dense and CNN models.
+- `Objective` wrapper for Optuna trials.
+- `run_optimization` helper to create and run Optuna studies.
+"""
+
 import time
 from collections.abc import Callable
 
@@ -212,14 +220,15 @@ class Objective:
         device: torch.device,
         patience: int,
         params: dict,
-        on_checkpoint: Callable[[int, nn.Module, float, float, float], None]
-        | None = None,
+        on_checkpoint: (
+            Callable[[int, nn.Module, float, float, float], None] | None
+        ) = None,
     ) -> None:
         """Initialize objective with dataset, device, and hyperparameter bounds."""
         self.model_choice = model_choice
-        self.X_train = x_train
+        self.x_train = x_train
         self.y_train = y_train
-        self.X_val = x_val
+        self.x_val = x_val
         self.y_val = y_val
         self.device = device
         self.patience = patience
@@ -274,15 +283,15 @@ class Objective:
                 "optimizer": optimizer,
             }
             _, loss, history = train_model(
-                torch.tensor(self.X_train, dtype=torch.float32).to(self.device),
+                torch.tensor(self.x_train, dtype=torch.float32).to(self.device),
                 torch.tensor(self.y_train, dtype=torch.float32)
                 .unsqueeze(1)
                 .to(self.device),
-                torch.tensor(self.X_val, dtype=torch.float32).to(self.device),
+                torch.tensor(self.x_val, dtype=torch.float32).to(self.device),
                 torch.tensor(self.y_val, dtype=torch.float32)
                 .unsqueeze(1)
                 .to(self.device),
-                self.X_train.shape[1],
+                self.x_train.shape[1],
                 config,
                 self.device,
                 self.patience,
@@ -328,9 +337,9 @@ class Objective:
                 "optimizer": optimizer,
             }
             _, loss, history = train_cnn_model(
-                self.X_train,
+                self.x_train,
                 self.y_train,
-                self.X_val,
+                self.x_val,
                 self.y_val,
                 config,
                 self.device,

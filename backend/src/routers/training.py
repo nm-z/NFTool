@@ -1,3 +1,9 @@
+"""Router endpoints for training, weight management, and inference.
+
+Provides REST endpoints to queue training jobs, abort running jobs,
+upload/load model weights, download weights, list runs, and perform inference.
+"""
+
 import os
 import shutil
 from datetime import datetime
@@ -10,15 +16,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from src.auth import verify_api_key
-from src.config import (
-    REPO_ROOT,
-    WORKSPACE_DIR,
-)
+from src.config import REPO_ROOT, WORKSPACE_DIR
+from src.data.processing import preprocess_for_cnn
 from src.database.database import get_db
 from src.database.models import ModelCheckpoint, Run
+from src.models.architectures import model_factory
 from src.schemas.training import TrainingConfig
-
-from ..services.queue_instance import job_queue
+from src.services.queue_instance import job_queue
 
 router = APIRouter()
 
@@ -32,6 +36,11 @@ __all__ = [
     "start_training",
 ]
 
+# Module-level FastAPI dependency/file defaults
+GET_DB_DEP = Depends(get_db)
+VERIFY_API_KEY_DEP = Depends(verify_api_key)
+UPLOAD_FILE_DEFAULT = File(...)
+
 
 @router.post(
     "/train",
@@ -44,34 +53,38 @@ __all__ = [
 )
 async def start_training(
     config: TrainingConfig,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(verify_api_key),
+    db: Session = GET_DB_DEP,
+    _api_key: str = VERIFY_API_KEY_DEP,
 ):
+    """Queue a training job using the provided configuration and return a run_id.
+
+    Converts Path-like fields in the config to strings, attempts to auto-fill
+    predictor/target paths from the repository `data/` directory when missing,
+    inserts a pending `Run` into the database, and enqueues the job.
+    """
+
     # Allow queuing multiple training requests (tests may generate concurrent cases).
     # The job queue will manage execution order; do not reject with 400 here.
 
     run_id = f"PASS_{datetime.now().strftime('%H%M%S%f')[:9]}"
     # Ensure config is JSON-serializable (convert Path-like fields to strings)
     config_dump = config.model_dump()
-    # Auto-fill predictor/target if missing: use files from data directory under REPO_ROOT
+    # Auto-fill predictor/target using CSVs under REPO_ROOT/data
     data_dir = os.path.join(REPO_ROOT, "data")
-    available = (
-        sorted([f for f in os.listdir(data_dir) if f.endswith(".csv")])
-        if os.path.exists(data_dir)
-        else []
-    )
+    if os.path.exists(data_dir):
+        available = sorted([f for f in os.listdir(data_dir) if f.endswith(".csv")])
+    else:
+        available = []
     for path_key in ("predictor_path", "target_path"):
         val = config_dump.get(path_key)
         if isinstance(val, Path):
             config_dump[path_key] = str(val)
-        if not config_dump.get(path_key):
-            if available:
-                if path_key == "predictor_path":
-                    config_dump[path_key] = os.path.join("data", available[0])
-                else:
-                    config_dump[path_key] = os.path.join(
-                        "data", available[1] if len(available) > 1 else available[0]
-                    )
+        if not config_dump.get(path_key) and available:
+            if path_key == "predictor_path":
+                config_dump[path_key] = os.path.join("data", available[0])
+            else:
+                choice = available[1] if len(available) > 1 else available[0]
+                config_dump[path_key] = os.path.join("data", choice)
 
     db.add(
         Run(
@@ -98,9 +111,12 @@ async def start_training(
         406: {"description": "Missing or invalid API key"},
     },
 )
-async def abort_training(
-    db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)
-):
+async def abort_training(db: Session = GET_DB_DEP, _api_key: str = VERIFY_API_KEY_DEP):
+    """Request abortion of the currently active training job (if any).
+
+    Returns a dict indicating whether a job was aborted or there was no active job.
+    """
+
     if await job_queue.abort_active_job(db):
         return {"status": "aborted"}
     # Return 200 even when there is no active job to match test expectations.
@@ -117,8 +133,14 @@ async def abort_training(
     },
 )
 async def load_weights(
-    file: UploadFile = File(...), api_key: str = Depends(verify_api_key)
+    file: UploadFile = UPLOAD_FILE_DEFAULT, _api_key: str = VERIFY_API_KEY_DEP
 ):
+    """Accept an uploaded weights file, save it to workspace uploads, and inspect it.
+
+    The endpoint is intentionally permissive with filename/extension handling so
+    test-generated cases can still be uploaded and examined.
+    """
+
     # Accept any uploaded file; save it and attempt to inspect. Do not reject
     # based solely on filename extension to be tolerant of test-generated cases.
     upload_dir = os.path.join(WORKSPACE_DIR, "uploads")
@@ -135,7 +157,7 @@ async def load_weights(
             info["r2"] = checkpoint.get("r2", "N/A")
             info["mae"] = checkpoint.get("mae", "N/A")
             info["model"] = checkpoint.get("model_choice", "Unknown")
-    except Exception:
+    except (RuntimeError, EOFError, OSError, ValueError):
         # If we can't parse the file as a PyTorch checkpoint, that's okay;
         # return 200 and let the caller decide how to handle the uploaded file.
         pass
@@ -152,8 +174,13 @@ async def load_weights(
     },
 )
 async def download_weights(
-    run_id: str, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)
+    run_id: str, db: Session = GET_DB_DEP, _api_key: str = VERIFY_API_KEY_DEP
 ):
+    """Return the most recent weights file for the given run_id.
+
+    Raises HTTPException(404) if no checkpoint exists or the file is missing.
+    """
+
     # verify_api_key dependency already enforces header; continue
     checkpoint = (
         db.query(ModelCheckpoint)
@@ -178,7 +205,9 @@ async def download_weights(
         406: {"description": "Missing or invalid API key"},
     },
 )
-def list_runs(db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+def list_runs(db: Session = GET_DB_DEP, _api_key: str = VERIFY_API_KEY_DEP):
+    """Return all Run records ordered from newest to oldest."""
+
     return db.query(Run).order_by(Run.timestamp.desc()).all()
 
 
@@ -195,9 +224,15 @@ def list_runs(db: Session = Depends(get_db), api_key: str = Depends(verify_api_k
 async def run_inference(
     model_path: str,
     features: list[float],
-    db: Session = Depends(get_db),
-    api_key: str = Depends(verify_api_key),
+    db: Session = GET_DB_DEP,
+    _api_key: str = VERIFY_API_KEY_DEP,
 ):
+    """Run inference and return the prediction.
+
+    Uses a saved checkpoint (or direct path) to validate input length, load
+    scalers and model weights, and return a numeric prediction plus model_r2.
+    """
+
     checkpoint = (
         db.query(ModelCheckpoint)
         .join(Run)
@@ -206,10 +241,7 @@ async def run_inference(
         .first()
     )
 
-    if checkpoint:
-        target = str(checkpoint.model_path)
-    else:
-        target = model_path
+    target = str(checkpoint.model_path) if checkpoint else model_path
 
     if not os.path.exists(target):
         raise HTTPException(status_code=404, detail="Model file not found")
@@ -225,8 +257,7 @@ async def run_inference(
     scaler_x_path = checkpoint_data.get("scaler_x_path")
     scaler_y_path = checkpoint_data.get("scaler_y_path")
 
-    scaler_X, scaler_y = joblib.load(scaler_x_path), joblib.load(scaler_y_path)
-    from src.models.architectures import model_factory
+    scaler_x, scaler_y = joblib.load(scaler_x_path), joblib.load(scaler_y_path)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model_factory(
@@ -237,18 +268,16 @@ async def run_inference(
     )
     model.load_state_dict(checkpoint_data["model_state_dict"])
     model.eval()
-    X_scaled = scaler_X.transform(np.array([features]))
-    X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(device)
+    x_scaled = scaler_x.transform(np.array([features]))
+    x_tensor = torch.tensor(x_scaled, dtype=torch.float32).to(device)
     if checkpoint_data.get("model_choice") == "CNN":
-        from src.data.processing import preprocess_for_cnn
-
-        X_tensor = preprocess_for_cnn(X_scaled).to(device)
+        x_tensor = preprocess_for_cnn(x_scaled).to(device)
     with torch.no_grad():
         prediction_raw = scaler_y.inverse_transform(
-            model(X_tensor).cpu().numpy().reshape(-1, 1)
+            model(x_tensor).cpu().numpy().reshape(-1, 1)
         ).flatten()[0]
 
-    if "device" in locals() and device.type == "cuda":
+    if device.type == "cuda":
         torch.cuda.empty_cache()
 
     return {

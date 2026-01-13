@@ -1,3 +1,5 @@
+"""Utilities to query system and GPU hardware statistics."""
+
 import json
 import logging
 import shutil
@@ -10,11 +12,19 @@ logger = logging.getLogger("nftool")
 
 
 class HardwareMonitor:
+    """Probe system and GPU hardware stats using vendor tooling when available.
+
+    This class prefers ROCm tooling (`rocm-smi`) then NVIDIA tooling
+    (`nvidia-smi`) and raises if neither is present so callers can handle
+    the absence of GPU management tools explicitly.
+    """
+
     def __init__(self):
         self.has_rocm = shutil.which("rocm-smi") is not None
         self.has_nvidia = shutil.which("nvidia-smi") is not None
 
     def get_gpu_stats(self, gpu_id: int = 0) -> dict[str, Any]:
+        """Return GPU statistics for `gpu_id` using available vendor tooling."""
         # Attempt to query vendor tooling. If neither ROCm nor NVIDIA tooling is
         # present, fail fast — do not return fabricated defaults.
         if self.has_rocm:
@@ -22,10 +32,13 @@ class HardwareMonitor:
         if self.has_nvidia:
             return self._get_nvidia_stats(gpu_id)
         raise RuntimeError(
-            "No GPU management tool found (rocm-smi or nvidia-smi). Hardware probing is required."
+            "No GPU management tool found (rocm-smi or nvidia-smi). "
+            "Hardware probing is required."
         )
 
     def _get_rocm_stats(self, gpu_id: int) -> dict[str, Any]:
+        """Query ROCm (`rocm-smi`) and parse JSON output for the target GPU."""
+
         def parse_rocm_json(output):
             start = output.find("{")
             end = output.rfind("}")
@@ -55,7 +68,7 @@ class HardwareMonitor:
         if data_use:
             card = next((k for k in target_keys if k in data_use), None)
             if not card and len(data_use) > 0:
-                card = list(data_use.keys())[0]
+                card = next(iter(data_use.keys()))
             if card:
                 use_val = (
                     data_use[card].get("GPU use (%)")
@@ -77,7 +90,7 @@ class HardwareMonitor:
         if data_mem:
             card = next((k for k in target_keys if k in data_mem), None)
             if not card and len(data_mem) > 0:
-                card = list(data_mem.keys())[0]
+                card = next(iter(data_mem.keys()))
             if card:
                 total_b = int(data_mem[card].get("VRAM Total Memory (B)", 0))
                 used_b = int(data_mem[card].get("VRAM Total Used Memory (B)", 0))
@@ -100,6 +113,7 @@ class HardwareMonitor:
         return gpu_stats
 
     def _get_nvidia_stats(self, gpu_id: int) -> dict[str, Any]:
+        """Query NVIDIA (`nvidia-smi`) for utilization, temperature and memory."""
         res = subprocess.run(
             [
                 "nvidia-smi",
@@ -124,6 +138,7 @@ class HardwareMonitor:
         }
 
     def _get_empty_stats(self) -> dict[str, Any]:
+        """Return a zeroed GPU stat structure."""
         return {
             "vram_total_gb": 0.0,
             "vram_used_gb": 0.0,
@@ -133,6 +148,7 @@ class HardwareMonitor:
         }
 
     def get_system_stats(self) -> dict[str, Any]:
+        """Return basic system CPU and RAM statistics."""
         cpu_percent = psutil.cpu_percent(interval=0.1)
         mem = psutil.virtual_memory()
         return {

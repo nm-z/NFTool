@@ -5,27 +5,31 @@ queue. It persists epoch metrics and logs to the database so the main
 process can forward them to connected WebSocket clients.
 """
 
+#
+# Lazy imports are intentionally local to avoid import cycles.
+# Local pylint disables are placed immediately next to those imports.
+
 import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Any as TypingAny
-from typing import cast as typing_cast
+from typing import Any as TypingAny, cast as typing_cast
 
 import joblib
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from src.config import (
-    REPORTS_DIR,
-    RESULTS_DIR,
-)
+
+import src.manager as _manager_module
+from src.config import REPORTS_DIR, RESULTS_DIR
 from src.data.processing import load_dataset, preprocess_for_cnn
 from src.database.database import SessionLocal
 from src.database.models import ModelCheckpoint, Run
+from src.models import architectures as architectures_module
 from src.schemas.training import TrainingConfig
 from src.schemas.websocket import MetricData, TelemetryMessage
+import src.services.queue_instance as queue_instance_module
 from src.training.engine import Objective, run_optimization
 from src.utils.broadcast_utils import db_log_and_broadcast
 from src.utils.reporting import analyze_optuna_study, generate_regression_plots
@@ -39,6 +43,25 @@ def _send_metrics_sync(conn_mgr: TypingAny, metric: dict[str, TypingAny]):
 
 def _send_status_sync(conn_mgr: TypingAny, status_data: dict[str, TypingAny]):
     """Send a structured status TelemetryMessage synchronously."""
+    # Ensure status payload includes queue and active job info so the UI's
+    # process monitor has a consistent shape. The job queue lives in a
+    # Ensure status payload includes queue and active job info so the UI's
+    # process monitor has a consistent shape. The job queue lives in a
+    # separate module; import lazily to avoid cycles.
+    try:
+        q_status = queue_instance_module.job_queue.get_status()
+        queue_size = q_status["queue_size"]
+        active_job_id = q_status["active_job_id"]
+        # Fill missing keys if caller omitted them.
+        if "queue_size" not in status_data:
+            status_data["queue_size"] = queue_size
+        if "active_job_id" not in status_data:
+            status_data["active_job_id"] = active_job_id
+    except (ImportError, RuntimeError, AttributeError):
+        # If we cannot obtain queue info, fall back to safe defaults.
+        status_data.setdefault("queue_size", 0)
+        status_data.setdefault("active_job_id", None)
+
     tm = TelemetryMessage(type="status", data=status_data)
     conn_mgr.broadcast_sync(tm)
 
@@ -54,42 +77,47 @@ def _prepare_data(
 ) -> tuple:
     """Load datasets, fit scalers, split into train/val/test and persist scalers.
 
-    Returns: (X_train, X_val, X_test, y_train, y_val, y_test, scaler_x_path, scaler_y_path, scaler_X, scaler_y)
+    Returns:
+        Tuple containing:
+            - X_train, X_val, X_test: numpy arrays for predictors
+            - y_train, y_val, y_test: numpy arrays for targets
+            - scaler_x_path, scaler_y_path: file paths to persisted scalers
+            - scaler_X, scaler_y: scaler objects used for transforms
     """
-    df_X = load_dataset(predictor_path)
+    df_x = load_dataset(predictor_path)
     df_y = load_dataset(target_path).dropna()
-    min_len = min(len(df_X), len(df_y))
-    X_raw = df_X.iloc[:min_len].values
+    min_len = min(len(df_x), len(df_y))
+    x_raw = df_x.iloc[:min_len].values
     y_raw = df_y.iloc[:min_len].values.flatten()
 
-    scaler_X, scaler_y = StandardScaler(), StandardScaler()
-    X_scaled = scaler_X.fit_transform(X_raw)
+    scaler_x, scaler_y = StandardScaler(), StandardScaler()
+    x_scaled = scaler_x.fit_transform(x_raw)
     y_scaled = scaler_y.fit_transform(y_raw.reshape(-1, 1)).flatten()
 
     os.makedirs(run_dir, exist_ok=True)
     scaler_x_path = os.path.join(run_dir, "scaler_x.pkl")
     scaler_y_path = os.path.join(run_dir, "scaler_y.pkl")
-    joblib.dump(scaler_X, scaler_x_path)
+    joblib.dump(scaler_x, scaler_x_path)
     joblib.dump(scaler_y, scaler_y_path)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y_scaled, test_size=config.test_ratio, random_state=config.seed
+    x_train, x_test, y_train, y_test = train_test_split(
+        x_scaled, y_scaled, test_size=config.test_ratio, random_state=config.seed
     )
     val_rel = config.val_ratio / (config.train_ratio + config.val_ratio)
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train, y_train, test_size=val_rel, random_state=config.seed
+    x_train, x_val, y_train, y_val = train_test_split(
+        x_train, y_train, test_size=val_rel, random_state=config.seed
     )
 
     # Ensure numpy arrays for shape/reshape access and downstream processing
-    X_train = np.asarray(X_train)
-    X_val = np.asarray(X_val)
-    X_test = np.asarray(X_test)
+    x_train = np.asarray(x_train)
+    x_val = np.asarray(x_val)
+    x_test = np.asarray(x_test)
     y_train = np.asarray(y_train)
     y_val = np.asarray(y_val)
     y_test = np.asarray(y_test)
 
     # Small status/log messages
-    msg = f"Dataset loaded: {len(X_raw)} samples, {X_raw.shape[1]} features"
+    msg = f"Dataset loaded: {len(x_raw)} samples, {x_raw.shape[1]} features"
     db_log_and_broadcast(db, run_id, msg, connection_manager, "info")
     split_msg = (
         f"Split Ratios: {int(config.train_ratio * 100)}% Train, "
@@ -98,15 +126,15 @@ def _prepare_data(
     db_log_and_broadcast(db, run_id, split_msg, connection_manager, "info")
 
     return (
-        X_train,
-        X_val,
-        X_test,
+        x_train,
+        x_val,
+        x_test,
         y_train,
         y_val,
         y_test,
         scaler_x_path,
         scaler_y_path,
-        scaler_X,
+        scaler_x,
         scaler_y,
     )
 
@@ -115,7 +143,9 @@ logger = logging.getLogger("nftool")
 
 
 def run_training_task(
-    config_dict: dict[str, TypingAny], run_id: str, connection_manager: TypingAny = None
+    config_dict: dict[str, TypingAny],
+    run_id: str,
+    connection_manager: TypingAny = None,
 ) -> None:
     """Execute a training run for the provided `config_dict` and `run_id`.
 
@@ -123,14 +153,18 @@ def run_training_task(
     persists epoch-level metrics and logs to the database so the manager
     process can forward them to connected WebSocket clients.
     """
-    # Use context manager for DB session and allow exceptions to propagate to the caller.
+    # Use DB session context; let exceptions propagate to caller.
     with SessionLocal() as db:
-        # Let it crash if run doesn't exist; caller will observe the exception.
+        # Let it crash; caller will observe the exception.
+        run = db.query(Run).filter(Run.run_id == run_id).one()
+    # Use DB session context; let exceptions propagate to caller.
+    with SessionLocal() as db:
+        # Let it crash; caller will observe the exception.
         run = db.query(Run).filter(Run.run_id == run_id).one()
         config = TrainingConfig(**config_dict)
 
         if connection_manager is None:
-            from src.manager import manager as connection_manager
+            connection_manager = _manager_module.manager
 
         db_log_and_broadcast(
             db,
@@ -169,15 +203,15 @@ def run_training_task(
         # Load, scale and split the data; persist scalers and emit initial logs.
         run_dir = os.path.join(REPORTS_DIR, run_id)
         (
-            X_train,
-            X_val,
-            X_test,
+            x_train,
+            x_val,
+            x_test,
             y_train,
             y_val,
             y_test,
             scaler_x_path,
             scaler_y_path,
-            _scaler_X,
+            _scaler_x,
             scaler_y,
         ) = _prepare_data(
             db,
@@ -215,7 +249,7 @@ def run_training_task(
             current_metrics.append(metric_point)
             typing_cast(TypingAny, run).metrics_history = current_metrics
 
-            # Append a short log entry for the epoch so it appears in the process stream.
+            # Append short epoch log so it appears in the process stream.
             current_logs = list(getattr(run, "logs", []) or [])
             epoch_msg = (
                 f"Epoch {epoch}/{num_epochs}: val_loss={val_loss:.6f}, r2={r2:.4f}"
@@ -257,9 +291,9 @@ def run_training_task(
             run_id=run_id,
             connection_manager=connection_manager,
             config=config,
-            X_train=X_train,
+            x_train=x_train,
             y_train=y_train,
-            X_val=X_val,
+            x_val=x_val,
             y_val=y_val,
             device=device,
             patience=config.patience,
@@ -283,7 +317,7 @@ def run_training_task(
             run_dir=run_dir,
             study=study,
             device=device,
-            X_test=X_test,
+            x_test=x_test,
             y_test=y_test,
             scaler_y=scaler_y,
             connection_manager=connection_manager,
@@ -384,7 +418,7 @@ def _finalize_run(
     run_dir: str,
     study: TypingAny,
     device: TypingAny,
-    X_test: np.ndarray,
+    x_test: np.ndarray,
     y_test: np.ndarray,
     scaler_y: TypingAny,
     connection_manager: TypingAny,
@@ -400,25 +434,36 @@ def _finalize_run(
     # Generate Regression Plots with Best Model if available
     best_model_path = os.path.join(run_dir, "best_model.pt")
     if os.path.exists(best_model_path):
+        db_log_and_broadcast(
+            db,
+            run_id,
+            "Generating diagnostic reports...",
+            connection_manager,
+            "info",
+        )
+
+    # Generate Regression Plots with Best Model if available
+    best_model_path = os.path.join(run_dir, "best_model.pt")
+    if os.path.exists(best_model_path):
         checkpoint = torch.load(best_model_path, map_location=device)
-        from src.models.architectures import model_factory
+        model_factory = architectures_module.model_factory
 
         checkpoint_config = (
             checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
         )
         merged_config = {**config.model_dump(), **checkpoint_config}
         best_model = model_factory(
-            config.model_choice, X_test.shape[1], merged_config, device
+            config.model_choice, x_test.shape[1], merged_config, device
         )
         best_model.load_state_dict(checkpoint["model_state_dict"])
         best_model.eval()
 
-        X_test_tensor = torch.tensor(X_test, dtype=torch.float32).to(device)
+        x_test_tensor = torch.tensor(x_test, dtype=torch.float32).to(device)
         if config.model_choice == "CNN":
-            X_test_tensor = preprocess_for_cnn(X_test).to(device)
+            x_test_tensor = preprocess_for_cnn(x_test).to(device)
 
         with torch.no_grad():
-            y_pred = best_model(X_test_tensor).cpu().numpy().flatten()
+            y_pred = best_model(x_test_tensor).cpu().numpy().flatten()
 
         y_test_orig = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
         y_pred_orig = scaler_y.inverse_transform(y_pred.reshape(-1, 1)).flatten()
@@ -427,7 +472,9 @@ def _finalize_run(
 
     typing_cast(TypingAny, run).status = "completed"
     db.commit()
-    msg = f"Optimization finished. Best R²: {typing_cast(float, getattr(run, 'best_r2', 0.0)):.4f}"
+    best_r2 = typing_cast(float, getattr(run, "best_r2", 0.0))
+    msg = f"Optimization finished. Best R²: {best_r2:.4f}"
+    # keep message concise for logs and broadcasts
     db_log_and_broadcast(db, run_id, msg, connection_manager, "success")
 
     # Cleanup and final broadcast. Compute final progress from run if available.
@@ -452,6 +499,8 @@ def _finalize_run(
                 "run_id": run_id,
                 "current_trial": final_trial,
                 "total_trials": final_total,
+                "queue_size": queue_size,
+                "active_job_id": active_job_id,
             },
         )
     )
@@ -463,9 +512,9 @@ def _make_tracked_objective(
     run_id: str,
     connection_manager: TypingAny,
     config: TrainingConfig,
-    X_train: np.ndarray,
+    x_train: np.ndarray,
     y_train: np.ndarray,
-    X_val: np.ndarray,
+    x_val: np.ndarray,
     y_val: np.ndarray,
     device: TypingAny,
     patience: int,
@@ -475,6 +524,8 @@ def _make_tracked_objective(
     """Create an Objective subclass that updates DB/run state and broadcasts status."""
 
     class TrackedObjective(Objective):
+        """Objective wrapper that updates DB state and broadcasts progress."""
+
         def __call__(self, trial):
             typing_cast(TypingAny, run).current_trial = trial.number
             db.commit()
@@ -492,9 +543,9 @@ def _make_tracked_objective(
 
     return TrackedObjective(
         config.model_choice,
-        X_train,
+        x_train,
         y_train,
-        X_val,
+        x_val,
         y_val,
         device,
         patience,
