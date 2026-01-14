@@ -533,6 +533,7 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                 status_val = getattr(latest_run, "status", None)
                 metrics = list(getattr(latest_run, "metrics_history", []) or [])
                 logs = list(getattr(latest_run, "logs", []) or [])
+                should_sync_history = status_val in ("running", "queued")
 
                 # If there's an active/running job, ensure the manager polls it
                 # for new updates.
@@ -573,59 +574,60 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                 except (WebSocketDisconnect, OSError, RuntimeError):
                     logger.exception("Failed to send initial status snapshot")
 
-                # Send persisted metrics and logs one message at a time so the
-                # client can render the full history immediately.
-                # Mark indexes so the manager doesn't forward duplicates later.
-                try:
-                    for m in metrics:
-                        try:
-                            metric_msg = TelemetryMessage(
-                                type="metrics", data=MetricData(**m)
-                            ).model_dump_json()
-                            await websocket.send_text(metric_msg)
-                        except (
-                            ValueError,
-                            TypeError,
-                            WebSocketDisconnect,
-                            OSError,
-                            RuntimeError,
-                        ) as exc:
-                            logger.exception(
-                                "Failed to send persisted metric to client: %s",
-                                exc,
-                            )
-                    if run_id:
-                        manager.set_metrics_index(run_id, len(metrics))
-                except (WebSocketDisconnect, OSError, RuntimeError):
-                    logger.exception(
-                        "Failed to send persisted metrics to websocket client"
-                    )
+                if should_sync_history:
+                    # Send persisted metrics and logs one message at a time so the
+                    # client can render the full history immediately.
+                    # Mark indexes so the manager doesn't forward duplicates later.
+                    try:
+                        for m in metrics:
+                            try:
+                                metric_msg = TelemetryMessage(
+                                    type="metrics", data=MetricData(**m)
+                                ).model_dump_json()
+                                await websocket.send_text(metric_msg)
+                            except (
+                                ValueError,
+                                TypeError,
+                                WebSocketDisconnect,
+                                OSError,
+                                RuntimeError,
+                            ) as exc:
+                                logger.exception(
+                                    "Failed to send persisted metric to client: %s",
+                                    exc,
+                                )
+                        if run_id:
+                            manager.set_metrics_index(run_id, len(metrics))
+                    except (WebSocketDisconnect, OSError, RuntimeError):
+                        logger.exception(
+                            "Failed to send persisted metrics to websocket client"
+                        )
 
-                try:
-                    for lg in logs:
-                        try:
-                            log_msg = TelemetryMessage(
-                                type="log", data=LogMessage(**lg)
-                            ).model_dump_json()
-                            await websocket.send_text(log_msg)
-                        except (
-                            ValueError,
-                            TypeError,
-                            WebSocketDisconnect,
-                            OSError,
-                            RuntimeError,
-                        ) as exc:
-                            logger.exception(
-                                "Failed to send persisted log to client: %s",
-                                exc,
-                            )
-                    if run_id:
-                        manager.set_logs_index(run_id, len(logs))
-                except (WebSocketDisconnect, OSError, RuntimeError) as exc:
-                    logger.exception(
-                        "Failed to send persisted logs to websocket client: %s",
-                        exc,
-                    )
+                    try:
+                        for lg in logs:
+                            try:
+                                log_msg = TelemetryMessage(
+                                    type="log", data=LogMessage(**lg)
+                                ).model_dump_json()
+                                await websocket.send_text(log_msg)
+                            except (
+                                ValueError,
+                                TypeError,
+                                WebSocketDisconnect,
+                                OSError,
+                                RuntimeError,
+                            ) as exc:
+                                logger.exception(
+                                    "Failed to send persisted log to client: %s",
+                                    exc,
+                                )
+                        if run_id:
+                            manager.set_logs_index(run_id, len(logs))
+                    except (WebSocketDisconnect, OSError, RuntimeError) as exc:
+                        logger.exception(
+                            "Failed to send persisted logs to websocket client: %s",
+                            exc,
+                        )
         except (SQLAlchemyError, WebSocketDisconnect, OSError, RuntimeError) as exc:
             # Handle benign WebSocket disconnects quietly (normal browser close/reload)
             if isinstance(exc, WebSocketDisconnect) and exc.code in (1000, 1001, 1006):

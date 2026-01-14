@@ -18,7 +18,7 @@ logger = logging.getLogger("nftool")
 class TrainingConfig(BaseModel):
     """Pydantic model describing the allowed training configuration fields."""
 
-    model_choice: str = Field(..., pattern="^(NN|CNN)$")
+    model_choice: str = Field("NN", pattern="^(NN|CNN)$")
     seed: int = Field(default=42, ge=0)
     patience: int = Field(default=100, ge=1)
     train_ratio: float = Field(default=0.7, ge=0.1, le=0.9)
@@ -51,8 +51,8 @@ class TrainingConfig(BaseModel):
     target_path: str | None = Field(default="")
 
     @model_validator(mode="before")
-    # Pydantic uses a class-style validator (cls, values) here.
-    def reject_boolean_numeric(self, values: Any) -> Any:
+    @classmethod
+    def reject_boolean_numeric(cls, values: Any) -> Any:
         """Before-model validation: ensure booleans aren't used for numeric fields.
 
         Only inspect dict-like request bodies; other top-level types should be

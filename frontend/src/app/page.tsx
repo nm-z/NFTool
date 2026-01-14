@@ -42,6 +42,19 @@ const API_URL = `${API_ROOT}/api/v1`;
 // WebSocket server is mounted at the application root (`/ws`), not under `/api/v1`.
 const WS_URL = API_ROOT.replace(/^http/, "ws");
 
+const waitForBackend = async (attempts = 5, delayMs = 1000) => {
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const res = await fetch(`${API_URL}/health`);
+      if (res.ok) return true;
+    } catch {
+      // Swallow network errors; we'll retry below.
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return false;
+};
+
 // Runtime validation and logging
 if (API_ROOT_ENV && !API_ROOT_ENV.startsWith("http")) {
   console.warn("NEXT_PUBLIC_API_URL is set but doesn't start with 'http', falling back to default:", API_ROOT);
@@ -87,6 +100,7 @@ export default function Dashboard() {
   const socketRef = useRef<WebSocket | null>(null);
   const startTimeoutRef = useRef<number | null>(null);
   const startRequestTsRef = useRef<number | null>(null);
+  const fetchRetryRef = useRef<number | null>(null);
   const [wsStatus, setWsStatus] = useState<number>(3);
 
   const getConnectionStatus = () => {
@@ -149,6 +163,15 @@ export default function Dashboard() {
     if (!isMounted) return;
     const headers = { "X-API-Key": API_KEY };
     const fetchData = async () => {
+      const backendReady = await waitForBackend(8, 1000);
+      if (!backendReady) {
+        console.warn("Backend not ready; retrying initial fetch.");
+        if (fetchRetryRef.current) {
+          clearTimeout(fetchRetryRef.current);
+        }
+        fetchRetryRef.current = window.setTimeout(fetchData, 2000);
+        return;
+      }
       try {
         const dsRes = await fetch(`${API_URL}/data/datasets`, { headers });
         if (dsRes.ok) {
@@ -171,7 +194,7 @@ export default function Dashboard() {
           }
         }
       } catch (e) {
-        console.error("Dataset fetch error:", e);
+        console.warn("Dataset fetch error:", e);
       }
 
       try {
@@ -198,15 +221,9 @@ export default function Dashboard() {
             // server-provided state. This prevents showing previous-run logs before
             // the user starts a new test.
             const latestStatus = (latest as Record<string, unknown>)?.status as string | undefined;
-            const latestHasResult = Boolean((latest as Record<string, unknown>)?.result);
-            const latestHasMetrics =
-              Array.isArray((latest as Record<string, unknown>)?.metrics_history) &&
-              ((latest as Record<string, unknown>)?.metrics_history as unknown[]).length > 0;
             const hasServerState =
               latestStatus === "running" ||
-              latestStatus === "queued" ||
-              latestHasResult ||
-              latestHasMetrics;
+              latestStatus === "queued";
 
             if (isLogArray(maybeLogs) && hasServerState) {
               type LogEntryLocal = {
@@ -229,17 +246,23 @@ export default function Dashboard() {
           }
         }
       } catch (e) {
-        console.error("Runs fetch error:", e);
+        console.warn("Runs fetch error:", e);
       }
 
       try {
         const gpuRes = await fetch(`${API_URL}/gpus`, { headers });
         if (gpuRes.ok) setGpuList(await gpuRes.json());
       } catch (e) {
-        console.error("GPU fetch error:", e);
+        console.warn("GPU fetch error:", e);
       }
     };
     fetchData();
+    return () => {
+      if (fetchRetryRef.current) {
+        clearTimeout(fetchRetryRef.current);
+        fetchRetryRef.current = null;
+      }
+    };
   }, [isMounted, setDatasets, setRuns, setGpuList, setSelectedPredictor, setSelectedTarget, setLogs]);
 
   useEffect(() => {
@@ -247,8 +270,16 @@ export default function Dashboard() {
     let active = true;
     let ws: WebSocket | null = null;
 
-    const connect = () => {
+    const connect = async () => {
       if (!active) return;
+      const backendReady = await waitForBackend(3, 1000);
+      if (!backendReady) {
+        if (active) {
+          setWsStatus(3);
+          setTimeout(connect, 2000);
+        }
+        return;
+      }
       try {
         ws = new WebSocket(`${WS_URL}/ws`, [`api-key-${API_KEY}`]);
         socketRef.current = ws;
@@ -450,6 +481,19 @@ export default function Dashboard() {
   }, []);
 
   const handleStartTraining = async () => {
+    const backendReady = await waitForBackend();
+    if (!backendReady) {
+      const msg = "Backend is not ready. Please wait and try again.";
+      console.warn(msg);
+      setError(msg);
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        msg: `Execution Error: ${msg}`,
+        type: "warn",
+      });
+      setIsStarting(false);
+      return;
+    }
     const s = useTrainingStore.getState();
 
     const [lrMin, lrMax] = parseRange(s.lrRange);
@@ -460,8 +504,11 @@ export default function Dashboard() {
     const [convMin, convMax] = parseRange(s.convBlocks);
     const [cnnFilterMin, cnnFilterMax] = parseRange(s.cnnFilterCapRange);
 
+    const rawModelChoice = s.modelType && s.modelType.trim() ? s.modelType.trim() : "NN";
+    const modelChoice =
+      rawModelChoice === "NN" || rawModelChoice === "CNN" ? rawModelChoice : "NN";
     const config = {
-      model_choice: s.modelType,
+      model_choice: modelChoice,
       seed: parseInt(s.seed) || 42,
       patience: parseInt(s.patience) || 100,
       train_ratio: s.split / 100,
@@ -700,6 +747,13 @@ export default function Dashboard() {
 
   const handleAbortTraining = async () => {
     try {
+      const backendReady = await waitForBackend();
+      if (!backendReady) {
+        const msg = "Backend is not ready. Please wait and try again.";
+        console.warn(msg);
+        setError(msg);
+        return;
+      }
       const res = await fetch(`${API_URL}/training/abort`, {
         method: "POST",
         headers: { "X-API-Key": API_KEY },

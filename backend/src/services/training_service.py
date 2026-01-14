@@ -81,8 +81,13 @@ def _prepare_data(
     str, str, Any, Any
 ]:
     """Load datasets, fit scalers, and split into train/val/test."""
-    df_x: Any = load_dataset(predictor_path)
-    df_y: Any = load_dataset(target_path)
+    try:
+        df_x: Any = load_dataset(predictor_path)
+        df_y: Any = load_dataset(target_path)
+    except Exception as exc:
+        msg = f"Dataset load failed: {exc}"
+        db_log_and_broadcast(db, run_id, msg, conn_mgr, "error")
+        raise
     df_y = df_y.dropna()
 
     min_len: int = int(min(len(df_x), len(df_y)))
@@ -343,6 +348,8 @@ def _make_tracked_objective(
         def __call__(self, trial: Any):
             run.current_trial = trial.number
             db.commit()
+            best_r2_raw = getattr(run, "best_r2", 0.0)
+            best_r2 = 0.0 if best_r2_raw is None else float(best_r2_raw)
             _send_status_sync(conn_mgr, {
                 "is_running": True,
                 "progress": int(getattr(run, "progress", 0)),
@@ -350,7 +357,7 @@ def _make_tracked_objective(
                 "current_trial": trial.number,
                 "total_trials": config.optuna_trials,
                 "metrics_history": getattr(run, "metrics_history", []),
-                "result": {"best_r2": float(getattr(run, "best_r2", 0.0))},
+                "result": {"best_r2": best_r2},
             })
             return super().__call__(trial)
 

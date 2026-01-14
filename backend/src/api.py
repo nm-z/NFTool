@@ -10,6 +10,8 @@ from typing import Any
 from typing import cast as typing_cast
 
 from fastapi import Depends, FastAPI, Request, WebSocket
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +37,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nftool")
 
+# Ensure CORS headers are present on error responses.
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Methods": "*",
+}
 # Forward warnings and uvicorn logs into the same handlers so errors land in api.log.
 logging.captureWarnings(True)
 _root_handlers = logging.getLogger().handlers
@@ -117,6 +125,30 @@ async def log_unhandled_errors(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error"},
+        headers=CORS_HEADERS,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return a JSON-serializable 422 response for validation errors."""
+    sanitized: list[dict[str, Any]] = []
+    for err in exc.errors():
+        if isinstance(err, dict):
+            err_dict = typing_cast(dict[str, Any], err)
+            cleaned = {str(k): v for k, v in err_dict.items()}
+            if "input" in cleaned:
+                try:
+                    jsonable_encoder(cleaned["input"])
+                except Exception:
+                    cleaned["input"] = str(cleaned["input"])
+            sanitized.append(cleaned)
+        else:
+            sanitized.append({"msg": str(err)})
+    return JSONResponse(
+        status_code=422,
+        content={"detail": sanitized},
+        headers=CORS_HEADERS,
     )
 
 
@@ -166,7 +198,7 @@ async def api_key_middleware(request: Request, call_next: Any) -> Any:
         return JSONResponse(
             status_code=405,
             content={"detail": "Method Not Allowed"},
-            headers={"Allow": allow_header},
+            headers={**CORS_HEADERS, "Allow": allow_header},
         )
     # Enforce API key at middleware level for training and data routes so the
     # header requirement is rejected before body validation (matches tests).
@@ -192,7 +224,7 @@ async def api_key_middleware(request: Request, call_next: Any) -> Any:
                 return JSONResponse(
                     status_code=405,
                     content={"detail": "Method Not Allowed"},
-                    headers={"Allow": allow_header},
+                    headers={**CORS_HEADERS, "Allow": allow_header},
                 )
         except ImportError:
             logger.warning(
@@ -204,7 +236,11 @@ async def api_key_middleware(request: Request, call_next: Any) -> Any:
         # Do not enforce API key at middleware level; route-level dependencies
         # handle authentication/validation. Middleware only enforces unsupported
         # methods (405) above and otherwise forwards to route handlers.
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    response.headers.setdefault("Access-Control-Allow-Headers", "*")
+    response.headers.setdefault("Access-Control-Allow-Methods", "*")
+    return response
 
 
 app.include_router(

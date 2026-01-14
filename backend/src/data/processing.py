@@ -14,12 +14,31 @@ import torch
 pd_any: Any = __import__("pandas", fromlist=["read_csv"])
 
 
+def _ensure_not_lfs_pointer(path: str) -> None:
+    """Raise a helpful error if the file is a Git LFS pointer."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            first_line = handle.readline().strip()
+            second_line = handle.readline().strip()
+    except OSError:
+        return
+
+    if first_line.startswith("version https://git-lfs.github.com/spec/v1") and (
+        second_line.startswith("oid sha256:")
+    ):
+        raise ValueError(
+            f"Dataset file looks like a Git LFS pointer, not real CSV data: {path}. "
+            "Run `git lfs pull` (or replace the file with the actual CSV) and retry."
+        )
+
+
 def load_dataset(path: str) -> pd.DataFrame:
     """Read a CSV file from `path` and return a pandas DataFrame.
 
     The CSV is expected to have no header; `header=None` is used for
     compatibility with the project's dataset files.
     """
+    _ensure_not_lfs_pointer(path)
     result_any: Any = pd_any.read_csv(path, header=None)
     result: pd.DataFrame = cast(pd.DataFrame, result_any)
     return result
