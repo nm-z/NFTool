@@ -13,10 +13,11 @@ from typing import Any, TypedDict, cast
 import numpy as np
 import torch
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from src.auth import verify_api_key
-from src.config import REPO_ROOT, WORKSPACE_DIR
+from src.config import REPO_ROOT, REPORTS_DIR, WORKSPACE_DIR
 from src.data.processing import preprocess_for_cnn
 from src.database.database import get_db
 from src.database.models import ModelCheckpoint, Run
@@ -42,15 +43,23 @@ class ModelCheckpointDict(TypedDict, total=False):
     config: dict[str, Any]
 
 
+class EvaluationRequest(BaseModel):
+    run_id: str = Field(..., min_length=1)
+    model_path: str | None = None
+    max_points: int = Field(200, ge=1, le=5000)
+
+
 router = APIRouter()
 
 __all__ = [
     "abort_training",
     "download_weights",
+    "evaluate_inference",
     "list_runs",
     "load_weights",
     "router",
     "run_inference",
+    "run_log",
     "start_training",
 ]
 
@@ -224,6 +233,39 @@ async def download_weights(
 
 
 @router.get(
+    "/runs/{run_id}/log",
+    responses={
+        200: {"description": "Run log text"},
+        404: {"description": "Run not found"},
+        406: {"description": "Missing or invalid API key"},
+    },
+)
+def run_log(run_id: str, db: Session = GET_DB_DEP, _api_key: str = VERIFY_API_KEY_DEP):
+    """Return a plaintext log transcript for the run."""
+    run = db.query(Run).filter(Run.run_id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    lines: list[str] = []
+    for entry in list(getattr(run, "logs", []) or []):
+        time_val = entry.get("time", "")
+        msg = entry.get("msg", "")
+        epoch = entry.get("epoch", None)
+        epoch_suffix = f" (Epoch {epoch})" if epoch is not None else ""
+        if time_val:
+            lines.append(f"[{time_val}]{epoch_suffix} {msg}".strip())
+        else:
+            lines.append(f"{epoch_suffix} {msg}".strip())
+
+    content = "\n".join(lines) or "No logs recorded for this run."
+    return PlainTextResponse(
+        content,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'inline; filename="{run_id}.log"'},
+    )
+
+
+@router.get(
     "/runs",
     responses={
         200: {"description": "List of runs"},
@@ -304,7 +346,7 @@ async def run_inference(
         )
     model.load_state_dict(model_state)
     model.eval()
-    x_scaled = scaler_x.transform(np.array([features]))
+    x_scaled: Any = scaler_x.transform(np.array([features], dtype=float))
     x_tensor = torch.tensor(x_scaled, dtype=torch.float32).to(device)
     if checkpoint_data.get("model_choice") == "CNN":
         x_tensor = preprocess_for_cnn(x_scaled).to(device)
@@ -319,4 +361,141 @@ async def run_inference(
     return {
         "prediction": float(prediction_raw),
         "model_r2": checkpoint_data.get("r2", 0.0),
+    }
+
+
+@router.post(
+    "/inference/evaluate",
+    responses={
+        200: {"description": "Batch evaluation on test set"},
+        400: {"description": "Invalid input"},
+        404: {"description": "Run/model not found"},
+        406: {"description": "Missing or invalid API key"},
+        422: {"description": "Validation error"},
+    },
+)
+async def evaluate_inference(
+    payload: EvaluationRequest,
+    db: Session = GET_DB_DEP,
+    _api_key: str = VERIFY_API_KEY_DEP,
+):
+    """Evaluate a run's model against its saved test split."""
+    run = db.query(Run).filter(Run.run_id == payload.run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    run_dir = os.path.join(REPORTS_DIR, payload.run_id)
+    x_test_path = os.path.join(run_dir, "x_test.npy")
+    y_test_path = os.path.join(run_dir, "y_test.npy")
+    if not os.path.exists(x_test_path) or not os.path.exists(y_test_path):
+        raise HTTPException(status_code=404, detail="Test set not found for run")
+
+    x_test = np.load(x_test_path)
+    y_test = np.load(y_test_path)
+
+    if payload.model_path:
+        target = payload.model_path
+    else:
+        checkpoint = (
+            db.query(ModelCheckpoint)
+            .join(Run)
+            .filter(Run.run_id == payload.run_id)
+            .order_by(ModelCheckpoint.id.desc())
+            .first()
+        )
+        if checkpoint:
+            target = str(checkpoint.model_path)
+        else:
+            target = os.path.join(run_dir, "best_model.pt")
+
+    if not os.path.exists(target):
+        raise HTTPException(status_code=404, detail="Model file not found")
+
+    checkpoint_raw: Any = torch_any.load(target, map_location="cpu")
+    checkpoint_data = cast(ModelCheckpointDict, checkpoint_raw)
+    input_size = checkpoint_data.get("input_size")
+    if input_size is None:
+        raise HTTPException(status_code=400, detail="Checkpoint missing input_size")
+
+    if x_test.shape[1] != input_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {input_size} features, got {x_test.shape[1]}",
+        )
+
+    scaler_y_path = checkpoint_data.get("scaler_y_path")
+    if scaler_y_path is None:
+        raise HTTPException(status_code=400, detail="Checkpoint missing scaler_y_path")
+
+    scaler_y: Any = jb.load(scaler_y_path)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model_factory(
+        checkpoint_data.get("model_choice", "NN"),
+        input_size,
+        checkpoint_data.get("config", {}),
+        device,
+    )
+    model_state = checkpoint_data.get("model_state_dict")
+    if model_state is None:
+        raise HTTPException(
+            status_code=400, detail="Checkpoint missing model_state_dict"
+        )
+    model.load_state_dict(model_state)
+    model.eval()
+
+    x_scaled = np.array(x_test)
+    x_tensor = torch.tensor(x_scaled, dtype=torch.float32).to(device)
+    if checkpoint_data.get("model_choice") == "CNN":
+        x_tensor = preprocess_for_cnn(x_scaled).to(device)
+
+    with torch.no_grad():
+        pred_scaled = model(x_tensor).cpu().numpy().reshape(-1, 1)
+
+    y_true = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
+    y_pred = scaler_y.inverse_transform(pred_scaled).flatten()
+
+    # Weighted Mean Absolute Percentage Error (WMAPE) is more stable for near-zero values
+    sum_abs_err = np.sum(np.abs(y_true - y_pred))
+    sum_abs_val = np.sum(np.abs(y_true))
+    wmape = float(sum_abs_err / sum_abs_val) if sum_abs_val > 0 else 0.0
+    accuracy = max(0.0, (1.0 - wmape) * 100.0)
+
+    # We still calculate individual point MAPE for the table
+    denom = np.maximum(np.abs(y_true), 1e-8)
+    errors = (np.abs(y_true - y_pred) / denom).tolist()
+    mape = float(np.mean(errors)) if errors else 0.0
+
+    max_points = min(payload.max_points, len(y_true))
+    comparisons: list[dict[str, float | int]] = []
+    for idx in range(max_points):
+        actual = float(y_true[idx])
+        pred = float(y_pred[idx])
+        abs_error = float(abs(actual - pred))
+        denom = abs(actual) if abs(actual) > 1e-8 else 1e-8
+        percent_error = float((abs_error / denom) * 100.0)
+        comparisons.append(
+            {
+                "index": idx,
+                "actual": actual,
+                "predicted": pred,
+                "abs_error": abs_error,
+                "percent_error": percent_error,
+            }
+        )
+
+    # Calculate R2 for the evaluation set
+    from sklearn.metrics import r2_score
+    r2 = float(r2_score(y_true, y_pred))
+
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+
+    return {
+        "run_id": payload.run_id,
+        "accuracy_percent": round(accuracy, 4),
+        "mape_percent": round(mape * 100.0, 4),
+        "r2_score": round(r2, 4),
+        "count": len(y_true),
+        "comparisons": comparisons,
     }

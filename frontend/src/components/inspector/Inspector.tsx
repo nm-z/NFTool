@@ -46,6 +46,8 @@ export function Inspector({
     setGpuThrottle,
     cnnFilterCapRange,
     setCnnFilterCapRange,
+    batchSize,
+    setBatchSize,
 
     // Dataset States
     datasets,
@@ -383,6 +385,15 @@ export function Inspector({
                     min={1}
                     max={1000}
                     tooltip="How many epochs to wait for improvement before giving up on a trial."
+                  />
+                  <ControlInput
+                    label="Batch Size"
+                    value={batchSize}
+                    onChange={setBatchSize}
+                    min={1}
+                    max={4096}
+                    step={1}
+                    tooltip="The number of training samples used in one iteration to update weights."
                   />
                   <ControlInput
                     label="GPU Throttle (s)"

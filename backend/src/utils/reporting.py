@@ -14,31 +14,46 @@ def analyze_optuna_study(study: Any, output_dir: str, _run_id: str) -> None:
     logger = logging.getLogger("nftool")
 
     try:
-        import optuna.visualization as vis  # type: ignore
-    except (
-        Exception
-    ) as exc:  # missing optional dependency (plotly/kaleido) or import error
+        vis: Any = __import__("optuna.visualization", fromlist=["*"])
+        pio: Any = __import__("plotly.io", fromlist=["*"])
+    except (ImportError, RuntimeError, OSError, ValueError) as exc:
         logger.info("Optuna plotting skipped: %s", exc)
         return
 
     out = Path(output_dir)
     try:
+        try:
+            if hasattr(pio, "kaleido") and hasattr(pio.kaleido, "scope"):
+                pio.kaleido.scope.chromium_path = "/usr/bin/chromium"
+        except (AttributeError, RuntimeError, OSError, ValueError):
+            logger.info("Optuna plotting: unable to set chromium path")
+
         # 1. Optimization History
         fig = vis.plot_optimization_history(study)
-        fig.write_image(str(out / "optuna_optimization_history.png"))
+        try:
+            fig.write_image(str(out / "optuna_optimization_history.png"))
+        except (RuntimeError, OSError, ValueError):
+            fig.write_html(str(out / "optuna_optimization_history.html"))
 
         # 2. Parameter Importances
         if len(study.trials) > 1:
             fig = vis.plot_param_importances(study)
-            fig.write_image(str(out / "optuna_param_importances.png"))
+            try:
+                fig.write_image(str(out / "optuna_param_importances.png"))
+            except (RuntimeError, OSError, ValueError):
+                fig.write_html(str(out / "optuna_param_importances.html"))
 
         # 3. Parallel Coordinate
         fig = vis.plot_parallel_coordinate(study)
-        fig.write_image(str(out / "optuna_parallel_coordinate.png"))
+        try:
+            fig.write_image(str(out / "optuna_parallel_coordinate.png"))
+        except (RuntimeError, OSError, ValueError):
+            fig.write_html(str(out / "optuna_parallel_coordinate.html"))
     except (
         ValueError,
         ImportError,
         OSError,
+        RuntimeError,
     ) as exc:  # guard against runtime plotting errors (kaleido/plotly issues)
         logger.info("Optuna plotting failed: %s", exc)
         return

@@ -92,6 +92,7 @@ export default function Dashboard() {
     setSelectedTarget,
     setRuns,
     setHardwareStats,
+    resetTrainingUi,
   } = useTrainingStore();
 
   const [isMounted, setIsMounted] = useState(false);
@@ -533,6 +534,7 @@ export default function Dashboard() {
       cnn_filter_cap_min: Math.round(cnnFilterMin),
       cnn_filter_cap_max: Math.round(cnnFilterMax),
       max_epochs: parseInt(s.maxEpochs) || 200,
+      batch_size: parseInt(s.batchSize) || 32,
       device: s.deviceChoice,
       gpu_id: s.gpuChoice,
       predictor_path: s.selectedPredictor,
@@ -569,6 +571,12 @@ export default function Dashboard() {
       setIsStarting(false);
       return;
     }
+    // Ensure each run starts from a clean UI baseline.
+    setLogs([]);
+    setMetricsHistory([]);
+    setResult(null);
+    setProgress(0);
+    setTrialInfo(0, config.optuna_trials);
     setIsStarting(true);
     console.debug("handleStartTraining: initiating training request", {
       config,
@@ -764,9 +772,29 @@ export default function Dashboard() {
         msg: "Termination signal dispatched to core engine",
         type: "warn",
       });
+      try {
+        const headers = { "X-API-Key": API_KEY };
+        const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+        if (runsRes.ok) {
+          const runsJson = await runsRes.json();
+          setRuns(runsJson);
+        }
+      } catch {
+        // ignore refresh errors
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(`Abort Failed: ${msg}`);
+    }
+  };
+
+  const handleResetTraining = () => {
+    resetTrainingUi();
+    setError(null);
+    startRequestTsRef.current = null;
+    if (startTimeoutRef.current) {
+      clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
     }
   };
 
@@ -784,6 +812,7 @@ export default function Dashboard() {
         totalTrials={totalTrials}
         handleStartTraining={handleStartTraining}
         handleAbortTraining={handleAbortTraining}
+        handleResetTraining={handleResetTraining}
         setActiveWorkspace={setActiveWorkspace}
       />
 

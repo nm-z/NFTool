@@ -18,6 +18,7 @@ interface HeaderProps {
   totalTrials: number;
   handleStartTraining: () => void;
   handleAbortTraining: () => void;
+  handleResetTraining: () => void;
   setActiveWorkspace: (ws: WorkspaceType) => void;
 }
 
@@ -29,10 +30,11 @@ export function Header({
   totalTrials,
   handleStartTraining,
   handleAbortTraining,
+  handleResetTraining,
   setActiveWorkspace,
 }: HeaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { addLog, setLoadedModelPath, runs } = useTrainingStore();
+  const { addLog, setLoadedModelPath, runs, logs, metricsHistory } = useTrainingStore();
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
@@ -66,17 +68,26 @@ export function Header({
     return undefined;
   };
 
-  const displayCurrentTrial =
-    extractNumber(activeRun as Record<string, unknown>, "current_trial", "currentTrial") ??
-    currentTrial;
+  const displayCurrentTrial = currentTrial;
   const displayTotalTrials =
+    totalTrials ||
     extractNumber(
       activeRun as Record<string, unknown>,
       "total_trials",
       "optuna_trials",
       "optunaTrials",
       "trials",
-    ) ?? totalTrials;
+    ) ||
+    0;
+  const normalizedCurrentTrial =
+    displayTotalTrials > 0 ? Math.min(displayCurrentTrial + 1, displayTotalTrials) : displayCurrentTrial;
+
+  const hasRunArtifacts = (logs?.length ?? 0) > 0 || (metricsHistory?.length ?? 0) > 0;
+  const canReset =
+    !displayIsRunning &&
+    !displayIsStarting &&
+    !isAborting &&
+    hasRunArtifacts;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,7 +194,7 @@ export function Header({
               : displayIsStarting
                 ? "Starting..."
                 : displayIsRunning
-                  ? `Running Trial ${displayCurrentTrial}/${displayTotalTrials}`
+                  ? `Running Trial ${normalizedCurrentTrial}/${displayTotalTrials}`
                   : "Engine Ready"}
           </span>
         </div>
@@ -236,6 +247,16 @@ export function Header({
                 <StopCircle size={12} />
               )}
               {isAborting ? "Aborting..." : "Stop"}
+            </button>
+          ) : canReset ? (
+            <button
+              type="button"
+              data-testid="btn-reset"
+              onClick={handleResetTraining}
+              className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+            >
+              <RefreshCw size={12} />
+              Reset
             </button>
           ) : (
             <button

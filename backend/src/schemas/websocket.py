@@ -49,6 +49,7 @@ class MetricData(BaseModel):
     """
 
     trial: int
+    epoch: int | None = None
     loss: float | None = None
     r2: float | None = None
     mae: float | None = None

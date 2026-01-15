@@ -1,5 +1,17 @@
 ---
 alwaysApply: true
 ---
-# Always use this instead of shell scripts
-docker-compose up
+# If you changed only Python code in ./backend
+
+# Fastest:
+docker compose restart backend
+
+# (Even better—no restart—if your backend uses auto-reload [uvicorn --reload, etc.].)
+
+# If you changed Python dependencies or the Dockerfile
+
+# Fastest rebuild (only backend, does not touch others):
+docker compose up -d --no-deps --build backend
+
+# If you want to force recreation even if Compose thinks it can reuse the container:
+docker compose up -d --no-deps --build --force-recreate backend

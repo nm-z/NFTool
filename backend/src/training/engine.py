@@ -34,13 +34,15 @@ def train_model(
     gpu_throttle_sleep: float = 0.1,
     check_stop: Callable[[], bool] | None = None,
     on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
-    checkpoint_callback: Callable[[nn.Module, float, float, float], None] | None = None,
+    checkpoint_callback: Callable[[nn.Module, float, float, float, int], None] | None = None,
 ) -> tuple[nn.Module | None, float, dict]:
     """Train a dense neural network and return (model, best_val_loss, history)."""
     if config is None:
         return None, float("inf"), {"train": [], "val": [], "r2": [], "mae": []}
 
     model = model_factory("NN", input_size, config, device)
+    model.input_size = input_size
+    model.config = config
     optimizer_class = getattr(optim, config["optimizer"])
     optimizer = optimizer_class(model.parameters(), lr=config["lr"], weight_decay=1e-5)
     criterion = nn.MSELoss()
@@ -100,7 +102,7 @@ def train_model(
             }
             counter = 0
             if checkpoint_callback:
-                checkpoint_callback(model, val_loss, r2, mae)
+                checkpoint_callback(model, val_loss, r2, mae, epoch)
         else:
             counter += 1
             if counter >= patience:
@@ -124,7 +126,7 @@ def train_cnn_model(
     gpu_throttle_sleep: float = 0.1,
     check_stop: Callable[[], bool] | None = None,
     on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
-    checkpoint_callback: Callable[[nn.Module, float, float, float], None] | None = None,
+    checkpoint_callback: Callable[[nn.Module, float, float, float, int], None] | None = None,
 ) -> tuple[nn.Module | None, float, dict]:
     """Train a CNN model. Inputs can be numpy arrays or torch tensors."""
     x_train = preprocess_for_cnn(x_train_np).to(device)
@@ -132,7 +134,10 @@ def train_cnn_model(
     y_train = torch.tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
     y_val = torch.tensor(y_val_np, dtype=torch.float32).unsqueeze(1).to(device)
 
-    model = model_factory("CNN", x_train.shape[2], config, device)
+    input_size = x_train.shape[2]
+    model = model_factory("CNN", input_size, config, device)
+    model.input_size = input_size
+    model.config = config
     optimizer_class = getattr(optim, config["optimizer"])
     optimizer = optimizer_class(model.parameters(), lr=config["lr"], weight_decay=1e-4)
     criterion = nn.MSELoss()
@@ -192,7 +197,7 @@ def train_cnn_model(
             }
             counter = 0
             if checkpoint_callback:
-                checkpoint_callback(model, val_loss, r2, mae)
+                checkpoint_callback(model, val_loss, r2, mae, epoch)
         else:
             counter += 1
             if counter >= patience:
@@ -221,7 +226,7 @@ class Objective:
         patience: int,
         params: dict,
         on_checkpoint: (
-            Callable[[int, nn.Module, float, float, float], None] | None
+            Callable[[int, nn.Module, float, float, float, int], None] | None
         ) = None,
     ) -> None:
         """Initialize objective with dataset, device, and hyperparameter bounds."""
@@ -260,10 +265,11 @@ class Objective:
             loss: float,
             r2: float,
             mae: float,
+            epoch: int,
         ) -> None:
             """Local wrapper to call the provided on_checkpoint callback."""
             if self.on_checkpoint:
-                self.on_checkpoint(trial.number, model, loss, r2, mae)
+                self.on_checkpoint(trial.number, model, loss, r2, mae, epoch)
 
         if self.model_choice == "NN":
             n_layers = trial.suggest_int(
@@ -296,6 +302,7 @@ class Objective:
                 self.device,
                 self.patience,
                 num_epochs=self.params.get("max_epochs", 200),
+                batch_size=self.params.get("batch_size", 32),
                 gpu_throttle_sleep=self.params.get("gpu_throttle_sleep", 0.1),
                 on_epoch_end=self.params.get("on_epoch_end"),
                 checkpoint_callback=local_checkpoint,
@@ -345,6 +352,7 @@ class Objective:
                 self.device,
                 self.patience,
                 num_epochs=self.params.get("max_epochs", 200),
+                batch_size=self.params.get("batch_size", 32),
                 gpu_throttle_sleep=self.params.get("gpu_throttle_sleep", 0.1),
                 on_epoch_end=self.params.get("on_epoch_end"),
                 checkpoint_callback=local_checkpoint,

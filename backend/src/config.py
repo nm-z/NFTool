@@ -24,8 +24,10 @@ API_KEY = os.getenv("API_KEY", "plyo")
 LOGS_DIR = os.path.join(WORKSPACE_DIR, "logs")
 RESULTS_DIR = os.path.join(WORKSPACE_DIR, "runs/results")
 REPORTS_DIR = os.path.join(WORKSPACE_DIR, "runs/reports")
+DATASETS_DIR = os.path.join(WORKSPACE_DIR, "datasets")
 
 # Ensure directories exist
 os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(DATASETS_DIR, exist_ok=True)

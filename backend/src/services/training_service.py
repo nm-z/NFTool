@@ -33,6 +33,7 @@ optuna: Any = __import__("optuna")
 __import__("sklearn.experimental.enable_halving_search_cv")
 sk_model: Any = __import__("sklearn.model_selection", fromlist=["*"])
 sk_pre: Any = __import__("sklearn.preprocessing", fromlist=["*"])
+np: Any = __import__("numpy")
 torch_any: Any = torch
 
 
@@ -118,6 +119,9 @@ def _prepare_data(
     y_train: Any = split_result[2]
     y_test: Any = split_result[3]
 
+    np.save(os.path.join(run_dir, "x_test.npy"), x_test)
+    np.save(os.path.join(run_dir, "y_test.npy"), y_test)
+
     val_rel = config.val_ratio / (config.train_ratio + config.val_ratio)
     split_result2 = sk_model.train_test_split(
         x_train, y_train, test_size=val_rel, random_state=config.seed
@@ -192,7 +196,7 @@ def run_training_task(
             run_any: Any = run
             run_any.progress = prog
             metric_point = {
-                "trial": cur_trial, "loss": loss, "r2": r2,
+                "trial": cur_trial, "epoch": epoch, "loss": loss, "r2": r2,
                 "mae": 0, "val_loss": v_loss,
             }
             hist = list(getattr(run, "metrics_history", []) or [])
@@ -209,10 +213,10 @@ def run_training_task(
 
         def on_checkpoint(
             trial_num: int, model: Any,
-            loss: float, r2: float, mae: float,
+            loss: float, r2: float, mae: float, epoch: int,
         ):
             _save_checkpoint(
-                db, run, run_dir, trial_num, model, loss, r2, mae,
+                db, run, run_dir, trial_num, model, loss, r2, mae, epoch,
                 sx_p, sy_p, conn_mgr, run_id, config,
             )
 
@@ -236,7 +240,7 @@ def run_training_task(
 
 def _save_checkpoint(
     db: Any, run: Any, run_dir: str, trial_num: int, model: Any,
-    loss: float, r2: float, mae: float, sx_p: str, sy_p: str,
+    loss: float, r2: float, mae: float, epoch: int, sx_p: str, sy_p: str,
     conn_mgr: Any, run_id: str, config: Any,
 ) -> None:
     """Persist a trial checkpoint and update DB history."""
@@ -265,7 +269,7 @@ def _save_checkpoint(
     ))
 
     metric_point = {
-        "trial": trial_num, "loss": loss, "r2": r2,
+        "trial": trial_num, "epoch": epoch, "loss": loss, "r2": r2,
         "mae": mae, "val_loss": loss
     }
     hist = list(getattr(run, "metrics_history", []) or [])
@@ -284,8 +288,9 @@ def _save_checkpoint(
             "result": {"best_r2": float(getattr(run, "best_r2", 0.0))},
         })
 
+    display_trial = trial_num + 1
     db_log_and_broadcast(
-        db, run_id, f"Saved Trial #{trial_num}", conn_mgr, "success"
+        db, run_id, f"Saved Trial #{display_trial}", conn_mgr, "success"
     )
 
 
@@ -305,7 +310,28 @@ def _finalize_run(
         factory: Any = arch.model_factory
 
         c_config = checkpoint.get("config", {})
-        merged = {**config.model_dump(), **c_config}
+        best_params = getattr(study, "best_params", {}) or {}
+        merged = {**config.model_dump(), **best_params, **c_config}
+        if config.model_choice == "NN" and "layers" not in merged:
+            n_layers = int(merged.get("num_layers") or config.n_layers_min)
+            layer_size = int(merged.get("layer_size") or config.l_size_min)
+            merged["layers"] = [layer_size] * n_layers
+        if config.model_choice == "NN":
+            merged.setdefault("dropout", float(merged.get("dropout", config.drop_min)))
+        if config.model_choice == "CNN" and "conv_layers" not in merged:
+            n_conv = int(merged.get("num_conv_blocks") or config.conv_blocks_min)
+            base_filters = int(merged.get("base_filters") or config.l_size_min)
+            cap_min = int(merged.get("cnn_filter_cap") or config.cnn_filter_cap_min)
+            cap_max = int(merged.get("cnn_filter_cap") or config.cnn_filter_cap_max)
+            current_cap = max(cap_min, min(base_filters * (2 ** (n_conv - 1)), cap_max))
+            merged["conv_layers"] = [
+                {
+                    "out_channels": min(base_filters * (2**i), current_cap),
+                    "kernel": int(merged.get("kernel_size") or config.kernel_size),
+                    "pool": 2,
+                }
+                for i in range(n_conv)
+            ]
         best_model = factory(config.model_choice, x_test.shape[1], merged, device)
         best_model.load_state_dict(checkpoint["model_state_dict"])
         best_model.eval()

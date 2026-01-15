@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg2 \
     curl \
+    chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python packaging tool) without using a pipe in RUN
@@ -23,6 +24,7 @@ ENV PATH="/root/.local/bin:${PATH}"
 COPY requirements.txt /app/requirements.txt
 RUN uv pip install --system --no-cache-dir --extra-index-url https://download.pytorch.org/whl/rocm6.2 -r /app/requirements.txt \
     && uv pip install --system --no-cache-dir pylint pylint-pydantic
+RUN kaleido_get_chrome
 
 # Copy source code (after dependency install to maximize Docker layer caching)
 COPY . /app

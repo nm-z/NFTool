@@ -37,6 +37,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nftool")
 
+
+class _SuppressWebsocketDebug(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.levelno < logging.INFO
+            and not record.name.startswith("nftool")
+        )
+
+
 # Ensure CORS headers are present on error responses.
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -46,12 +55,22 @@ CORS_HEADERS = {
 # Forward warnings and uvicorn logs into the same handlers so errors land in api.log.
 logging.captureWarnings(True)
 _root_handlers = logging.getLogger().handlers
+_ws_filter = _SuppressWebsocketDebug()
+for _handler in _root_handlers:
+    _handler.addFilter(_ws_filter)
 for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
     _logger = logging.getLogger(_name)
-    _logger.setLevel(logging.DEBUG)
+    _logger.setLevel(logging.INFO)
     for _handler in _root_handlers:
         if _handler not in _logger.handlers:
             _logger.addHandler(_handler)
+    _logger.propagate = False
+
+# Reduce websocket debug noise from underlying libraries.
+for _name in ("websockets", "websockets.server", "websockets.protocol"):
+    _logger = logging.getLogger(_name)
+    _logger.handlers.clear()
+    _logger.setLevel(logging.WARNING)
     _logger.propagate = False
 
 # Initialize database (create tables)

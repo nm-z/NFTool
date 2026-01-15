@@ -24,7 +24,6 @@ import {
 
 import { SummaryCard } from "../common/Cards";
 import { TabTrigger } from "../common/UIComponents";
-import { DatasetPreview } from "./tools/DatasetPreview";
 import { InferencePlayground } from "./tools/InferencePlayground";
 import { useTrainingStore } from "@/store/useTrainingStore";
 
@@ -94,6 +93,17 @@ export function TrainWorkspace() {
   const datasetName = selectedPredictor
     ? selectedPredictor.split("/").pop()
     : "None Selected";
+  const displayTotalTrials = totalTrials;
+  const displayCurrentTrial =
+    displayTotalTrials > 0 ? Math.min(currentTrial + 1, displayTotalTrials) : currentTrial;
+  const chartData = React.useMemo(
+    () =>
+      (metricsHistory ?? []).map((point, index) => ({
+        ...point,
+        step: index,
+      })),
+    [metricsHistory],
+  );
 
   return (
     <div
@@ -105,7 +115,6 @@ export function TrainWorkspace() {
           <Tabs.List className="flex gap-8">
             <TabTrigger value="optimization" label="Optimization" />
             <TabTrigger value="inference" label="Inference Playground" />
-            <TabTrigger value="preview" label="Dataset Preview" />
           </Tabs.List>
 
           <div className="flex items-center gap-6">
@@ -158,7 +167,7 @@ export function TrainWorkspace() {
                       value={isRunning ? "Active" : "Idle"}
                       subValue={
                         isRunning
-                          ? `Trial ${currentTrial}/${totalTrials}`
+                          ? `Trial ${displayCurrentTrial}/${displayTotalTrials}`
                           : "Awaiting Run"
                       }
                     />
@@ -187,7 +196,7 @@ export function TrainWorkspace() {
                       {isMounted ? (
                         <ResponsiveContainer width="100%" height={240}>
                           <RechartsLineChart
-                            data={metricsHistory || []}
+                            data={chartData}
                             margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
                           >
                             <CartesianGrid
@@ -195,7 +204,7 @@ export function TrainWorkspace() {
                               stroke="#18181b"
                               vertical={false}
                             />
-                            <XAxis dataKey="trial" hide />
+                            <XAxis dataKey="step" hide />
                             <YAxis
                               yAxisId="left"
                               stroke="#3f3f46"
@@ -229,6 +238,15 @@ export function TrainWorkspace() {
                               }}
                               itemStyle={{ padding: "2px 0" }}
                               cursor={{ stroke: "#27272a", strokeWidth: 1 }}
+                              labelFormatter={(_label, payload) => {
+                                const entry = Array.isArray(payload) ? payload[0]?.payload : undefined;
+                                if (!entry) return "Step";
+                                const trialLabel =
+                                  entry.trial != null ? `Trial ${entry.trial + 1}` : "Trial ?";
+                                const epochLabel =
+                                  entry.epoch != null ? `Epoch ${entry.epoch}` : "Epoch ?";
+                                return `${trialLabel} • ${epochLabel}`;
+                              }}
                             />
                             <Line
                               yAxisId="left"
@@ -275,6 +293,9 @@ export function TrainWorkspace() {
                               TRIAL
                             </th>
                             <th className="px-4 py-2 border-b border-zinc-800">
+                              EPOCH
+                            </th>
+                            <th className="px-4 py-2 border-b border-zinc-800">
                               R²
                             </th>
                             <th className="px-4 py-2 border-b border-zinc-800">
@@ -295,7 +316,10 @@ export function TrainWorkspace() {
                                 className="border-b border-zinc-800/50 hover:bg-zinc-800/30"
                               >
                                 <td className="px-4 py-2 text-zinc-500">
-                                  #{m.trial}
+                                  #{m.trial + 1}
+                                </td>
+                                <td className="px-4 py-2 text-zinc-500">
+                                  {m.epoch ?? "-"}
                                 </td>
                                 <td className="px-4 py-2 text-white">
                                   {m.r2?.toFixed(4) || "0.0000"}
@@ -376,12 +400,6 @@ export function TrainWorkspace() {
             </div>
           </Tabs.Content>
 
-          <Tabs.Content
-            value="preview"
-            className="h-full overflow-y-auto custom-scrollbar p-6 data-[state=inactive]:hidden"
-          >
-            <DatasetPreview initialPath={selectedPredictor} />
-          </Tabs.Content>
         </div>
       </Tabs.Root>
     </div>

@@ -14,6 +14,7 @@ interface TrainingResult {
 
 interface MetricPoint {
   trial: number;
+  epoch?: number;
   loss: number;
   r2: number;
   mae: number;
@@ -81,6 +82,7 @@ interface TrainingState {
   maxEpochs: string;
   gpuThrottle: string;
   cnnFilterCapRange: string;
+  batchSize: string;
 
   // Actions
   setActiveWorkspace: (ws: WorkspaceType) => void;
@@ -107,6 +109,7 @@ interface TrainingState {
   setSelectedTarget: (path: string) => void;
   setDatasets: (datasets: { name: string; path: string }[]) => void;
   setRuns: (runs: Record<string, unknown>[]) => void;
+  resetTrainingUi: () => void;
 
   // Config Setters
   setSeed: (v: string) => void;
@@ -124,6 +127,7 @@ interface TrainingState {
   setMaxEpochs: (v: string) => void;
   setGpuThrottle: (v: string) => void;
   setCnnFilterCapRange: (v: string) => void;
+  setBatchSize: (v: string) => void;
 }
 
 export const useTrainingStore = create<TrainingState>((set) => ({
@@ -166,6 +170,7 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   maxEpochs: "200",
   gpuThrottle: "0.1",
   cnnFilterCapRange: "512 → 1024",
+  batchSize: "32",
 
   setActiveWorkspace: (activeWorkspace) => set({ activeWorkspace }),
   setIsAdvancedMode: (isAdvancedMode) => set({ isAdvancedMode }),
@@ -211,6 +216,18 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   setSelectedTarget: (selectedTarget) => set({ selectedTarget }),
   setDatasets: (datasets) => set({ datasets }),
   setRuns: (runs) => set({ runs }),
+  resetTrainingUi: () =>
+    set({
+      isRunning: false,
+      isStarting: false,
+      isAborting: false,
+      progress: 0,
+      currentTrial: 0,
+      totalTrials: 0,
+      logs: [],
+      metricsHistory: [],
+      result: null,
+    }),
 
   // Config Setters
   setSeed: (seed) => set({ seed }),
@@ -228,4 +245,5 @@ export const useTrainingStore = create<TrainingState>((set) => ({
   setMaxEpochs: (maxEpochs) => set({ maxEpochs }),
   setGpuThrottle: (gpuThrottle) => set({ gpuThrottle }),
   setCnnFilterCapRange: (cnnFilterCapRange) => set({ cnnFilterCapRange }),
+  setBatchSize: (batchSize) => set({ batchSize }),
 }));

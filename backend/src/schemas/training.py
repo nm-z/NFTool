@@ -43,6 +43,7 @@ class TrainingConfig(BaseModel):
     cnn_filter_cap_min: int = Field(default=16, ge=16, le=4096)
     cnn_filter_cap_max: int = Field(default=512, ge=16, le=4096)
     max_epochs: int = Field(default=200, ge=1, le=10000)
+    batch_size: int = Field(default=32, ge=1, le=4096)
     device: str = Field(default="cuda", pattern="^(cuda|cpu)$")
     gpu_id: int = Field(default=0, ge=0)
     # Allow empty strings so schemathesis-generated cases without file paths
@@ -76,6 +77,7 @@ class TrainingConfig(BaseModel):
             "cnn_filter_cap_min",
             "cnn_filter_cap_max",
             "max_epochs",
+            "batch_size",
             "gpu_id",
         ]
         float_fields = [
@@ -116,6 +118,7 @@ class TrainingConfig(BaseModel):
             "cnn_filter_cap_min",
             "cnn_filter_cap_max",
             "max_epochs",
+            "batch_size",
             "gpu_id",
         ]
         float_fields = [

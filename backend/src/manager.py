@@ -11,13 +11,11 @@ import json
 import logging
 import os
 import subprocess
-import sys
 from importlib import import_module
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import SQLAlchemyError
-from src.config import LOGS_DIR
 from src.database.database import SESSION_LOCAL
 from src.database.models import ModelCheckpoint, Run
 from src.schemas.websocket import (
@@ -29,15 +27,7 @@ from src.schemas.websocket import (
 )
 from src.utils.hardware import HardwareMonitor
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(os.path.join(LOGS_DIR, "api.log")),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger("nftool")
+logger = logging.getLogger("nftool.manager")
 
 
 class ConnectionManager:
@@ -443,10 +433,10 @@ class ConnectionManager:
                     # Mark client as disconnected; cleanup after attempting all sends
                     disconnected.append(client)
                     # Handle benign WebSocket disconnects quietly
-                    if (isinstance(exc, WebSocketDisconnect) and
-                            exc.code in (1000, 1001, 1006)):
-                        logger.debug(
-                            "Client disconnected during broadcast (code: %d)", exc.code
+                    if isinstance(exc, WebSocketDisconnect):
+                        logger.info(
+                            "Client disconnected during broadcast (code: %s)",
+                            exc.code,
                         )
                     else:
                         logger.exception("WS send err; sched disconnect")
@@ -629,20 +619,25 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str):
                             exc,
                         )
         except (SQLAlchemyError, WebSocketDisconnect, OSError, RuntimeError) as exc:
-            # Handle benign WebSocket disconnects quietly (normal browser close/reload)
-            if isinstance(exc, WebSocketDisconnect) and exc.code in (1000, 1001, 1006):
+            if isinstance(exc, WebSocketDisconnect):
                 logger.info(
-                    "WebSocket client disconnected normally (code: %d)", exc.code
+                    "WebSocket client disconnected during catch-up (code: %s)",
+                    exc.code,
                 )
             else:
                 logger.exception(
                     "Failed to catch up client with persisted run data: %s", exc
                 )
 
-        while True:
-            data = await websocket.receive_text()
-            if data == "ping":
-                await websocket.send_text(json.dumps({"type": "pong"}))
+        try:
+            while True:
+                data = await websocket.receive_text()
+                if data == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
+        except WebSocketDisconnect as exc:
+            logger.info(
+                "WebSocket client disconnected (code: %s)", exc.code
+            )
     finally:
         db.close()
         await manager.disconnect(websocket)
