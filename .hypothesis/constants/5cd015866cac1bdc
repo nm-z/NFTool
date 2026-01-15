@@ -1,4 +1,0 @@
-# file: /home/nate/Desktop/NFTool/backend/src/routers/hardware.py
-# hypothesis_version: 6.150.0
-
-[200, 1024, '/capabilities', '/gpus', '/health', 'CPU', 'N/A', '__version__', 'compute_capability', 'cuda_available', 'device', 'device_name', 'driver_version', 'gpu', 'id', 'is_available', 'name', 'ok', 'status', 'supports_bf16', 'supports_fp16', 'total_memory_gb']

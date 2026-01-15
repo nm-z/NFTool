@@ -1,4 +1,0 @@
-# file: /home/nate/Desktop/NFTool/backend/src/models/architectures.py
-# hypothesis_version: 6.150.0
-
-[0.0, 0.2, 128, 'CNN', 'NN', 'conv_layers', 'dropout', 'hidden_dim', 'kernel', 'layers', 'out_channels', 'pool', 'stride']

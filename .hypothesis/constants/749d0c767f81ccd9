@@ -1,4 +1,0 @@
-# file: /home/nate/Desktop/NFTool/backend/src/manager.py
-# hypothesis_version: 6.150.0
-
-[0.0, 4003, ',', 'Unauthorized', 'active_job_id', 'api-key-', 'api.log', 'best_r2', 'cpu_percent', 'cpu_util', 'current_trial', 'data', 'error', 'gpu_mem_percent', 'gpu_mem_total', 'gpu_mem_used', 'gpu_temp', 'gpu_temp_c', 'gpu_use_percent', 'gpu_util', 'hardware', 'init', 'is_processing', 'logs', 'metrics_history', 'nftool', 'optuna_trials', 'ping', 'pong', 'progress', 'queue_size', 'ram_percent', 'ram_total', 'ram_total_gb', 'ram_used', 'ram_used_gb', 'type', 'vram_percent', 'vram_total_gb', 'vram_used_gb']

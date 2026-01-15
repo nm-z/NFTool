@@ -1,4 +1,0 @@
-# file: /home/nate/Desktop/NFTool/backend/src/api.py
-# hypothesis_version: 6.150.0
-
-[403, 405, 406, 8001, '%H:%M:%S', '*', ', ', '/api/v1', '/api/v1/data', '/api/v1/training', '/reports', '/results', '/ws', '0.0.0.0', 'Allow', 'DELETE', 'GET', 'HEAD', 'Invalid API Key', 'Invalid X-API-Key', 'Method Not Allowed', 'Missing X-API-Key', 'NFTool API', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'X-API-Key', '__main__', 'api.log', 'detail', 'failed', 'http', 'methods', 'msg', 'nftool', 'reports', 'results', 'running', 'time', 'type', 'warn', 'x-api-key']

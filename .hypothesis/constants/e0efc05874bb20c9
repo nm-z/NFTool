@@ -1,4 +1,0 @@
-# file: /home/nate/Desktop/NFTool/backend/src/utils/reporting.py
-# hypothesis_version: 6.150.0
-
-[0.3, 0.5, 0.7, '#3b82f6', '--', 'Actual Values', 'Frequency', 'Ideal', 'Predicted Values', 'Residual Value', 'black', 'nftool', 'r--', 'red']

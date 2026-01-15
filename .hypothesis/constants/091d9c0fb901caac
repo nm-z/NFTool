@@ -1,4 +1,0 @@
-# file: /home/nate/Desktop/NFTool/backend/src/utils/hardware.py
-# hypothesis_version: 6.150.0
-
-[0.0, 0.1, 100, 1024, '%', ', ', '--json', '--showmeminfo', '--showtemp', '--showuse', 'GPU Utilization', 'GPU use', 'GPU use (%)', 'GPU utilization (%)', 'Temperature (C)', 'cpu_percent', 'gpu_temp_c', 'gpu_use_percent', 'nftool', 'nvidia-smi', 'ram_percent', 'ram_total_gb', 'ram_used_gb', 'rocm-smi', 'vram', 'vram_percent', 'vram_total_gb', 'vram_used_gb', '{', '}']

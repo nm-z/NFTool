@@ -1,21 +1,47 @@
-# runtime
+# Runtime & Logs
 workspace/
 Logs/
 results/
 Training Reports/
+*.log
+*.sarif
 
-# python
+# Python
 .venv/
 __pycache__/
 *.pyc
+.coverage
+.pytest_cache/
+.hypothesis/
+backend/.cache/
+backend/.config/
+backend/.pki/
 
-# frontend
+# Frontend
 frontend/.next/
 frontend/node_modules/
+frontend/.eslintcache
 
-# db
+# Database
 *.db
 
-# hypothesis
-.hypothesis/constants
-.hypothesis/unicode_data/
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs & Tools
+.vscode/
+.idea/
+.cursor/commands/
+.cursor/plans/
+.tmp/
+.trivycache/
+.trivycache_be/
+.trivycache_fe/
+
+# OS
+.DS_Store
+Thumbs.db
