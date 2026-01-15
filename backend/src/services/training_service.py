@@ -312,27 +312,32 @@ def _finalize_run(
         c_config = checkpoint.get("config", {})
         best_params = getattr(study, "best_params", {}) or {}
         merged = {**config.model_dump(), **best_params, **c_config}
-        if config.model_choice == "NN" and "layers" not in merged:
-            n_layers = int(merged.get("num_layers") or config.n_layers_min)
-            layer_size = int(merged.get("layer_size") or config.l_size_min)
-            merged["layers"] = [layer_size] * n_layers
-        if config.model_choice == "NN":
+        m_choice = merged.get("model_choice", config.model_choice)
+        if m_choice == "NN":
+            if "layers" not in merged:
+                n_layers = int(merged.get("num_layers") or config.n_layers_min)
+                layer_size = int(merged.get("layer_size") or config.l_size_min)
+                merged["layers"] = [layer_size] * n_layers
             merged.setdefault("dropout", float(merged.get("dropout", config.drop_min)))
-        if config.model_choice == "CNN" and "conv_layers" not in merged:
-            n_conv = int(merged.get("num_conv_blocks") or config.conv_blocks_min)
-            base_filters = int(merged.get("base_filters") or config.l_size_min)
-            cap_min = int(merged.get("cnn_filter_cap") or config.cnn_filter_cap_min)
-            cap_max = int(merged.get("cnn_filter_cap") or config.cnn_filter_cap_max)
-            current_cap = max(cap_min, min(base_filters * (2 ** (n_conv - 1)), cap_max))
-            merged["conv_layers"] = [
-                {
-                    "out_channels": min(base_filters * (2**i), current_cap),
-                    "kernel": int(merged.get("kernel_size") or config.kernel_size),
-                    "pool": 2,
-                }
-                for i in range(n_conv)
-            ]
-        best_model = factory(config.model_choice, x_test.shape[1], merged, device)
+        elif m_choice == "CNN":
+            if "conv_layers" not in merged:
+                n_conv = int(merged.get("num_conv_blocks") or config.conv_blocks_min)
+                base_filters = int(merged.get("base_filters") or config.l_size_min)
+                cap_min = int(merged.get("cnn_filter_cap") or config.cnn_filter_cap_min)
+                cap_max = int(merged.get("cnn_filter_cap") or config.cnn_filter_cap_max)
+                current_cap = max(
+                    cap_min, min(base_filters * (2 ** (n_conv - 1)), cap_max)
+                )
+                merged["conv_layers"] = [
+                    {
+                        "out_channels": min(base_filters * (2**i), current_cap),
+                        "kernel": int(merged.get("kernel_size") or config.kernel_size),
+                        "pool": 2,
+                    }
+                    for i in range(n_conv)
+                ]
+
+        best_model = factory(m_choice, x_test.shape[1], merged, device)
         best_model.load_state_dict(checkpoint["model_state_dict"])
         best_model.eval()
 

@@ -183,17 +183,45 @@ def model_factory(
     if model_choice == "NN":
         if isinstance(input_size, tuple):
             raise ValueError("RegressionNet requires int input_size, not tuple")
-        return RegressionNet(
-            input_size=input_size, layers=config["layers"], dropout=config["dropout"]
-        ).to(device)
+        layers = config.get("layers")
+        if layers is None:
+            # Fallback for incomplete configs (e.g. from Optuna best_params)
+            n_layers = int(config.get("num_layers") or config.get("n_layers_min", 1))
+            l_size = int(config.get("layer_size") or config.get("l_size_min", 128))
+            layers = [l_size] * n_layers
+
+        dropout = float(config.get("dropout", config.get("drop_min", 0.0)))
+        return RegressionNet(input_size=input_size, layers=layers, dropout=dropout).to(
+            device
+        )
     elif model_choice == "CNN":
         # Frequency bins is the feature count
         freq_bins = input_size[2] if isinstance(input_size, tuple) else input_size
+        conv_layers = config.get("conv_layers")
+        if conv_layers is None and "num_conv_blocks" in config:
+            # Fallback for CNN if explicit conv_layers is missing but params are present
+            n_conv = int(
+                config.get("num_conv_blocks") or config.get("conv_blocks_min", 1)
+            )
+            base_filters = int(config.get("base_filters") or config.get("l_size_min", 32))
+            cap_max = int(config.get("cnn_filter_cap_max", 512))
+            current_cap = int(config.get("cnn_filter_cap") or cap_max)
+            conv_layers = [
+                {
+                    "out_channels": min(base_filters * (2**i), current_cap),
+                    "kernel": int(config.get("kernel_size", 3)),
+                    "pool": 2,
+                }
+                for i in range(n_conv)
+            ]
+
+        hidden_dim = int(config.get("hidden_dim") or config.get("h_dim_min", 128))
+        dropout = float(config.get("dropout", 0.2))
         return CNNRegressionNet(
             freq_bins=freq_bins,
-            conv_layers=config.get("conv_layers"),
-            hidden_dim=config.get("hidden_dim", 128),
-            dropout=config.get("dropout", 0.2),
+            conv_layers=conv_layers,
+            hidden_dim=hidden_dim,
+            dropout=dropout,
         ).to(device)
     else:
         raise ValueError(f"Unsupported model_choice: {model_choice}")
