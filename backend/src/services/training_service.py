@@ -302,11 +302,6 @@ def _save_checkpoint(
             "result": {"best_r2": float(getattr(run, "best_r2", 0.0))},
         })
 
-    display_trial = trial_num + 1
-    db_log_and_broadcast(
-        db, run_id, f"Saved Trial #{display_trial}", conn_mgr, "success"
-    )
-
 
 def _finalize_run(
     db: Any, run: Any, run_dir: str, study: Any, device: Any,
@@ -371,12 +366,18 @@ def _finalize_run(
     if getattr(device, "type", "") == "cuda":
         torch.cuda.empty_cache()
 
+    best_r2 = float(getattr(run, "best_r2", 0.0))
+    db_log_and_broadcast(
+        db, run_id, f"Training completed! Best R²: {best_r2:.4f}", conn_mgr, "success"
+    )
+
     _send_status_sync(conn_mgr, {
         "is_running": False,
         "progress": 100,
         "run_id": run_id,
         "current_trial": int(getattr(run, "current_trial", 0)),
         "total_trials": int(getattr(run, "optuna_trials", 0)),
+        "result": {"best_r2": best_r2},
     })
 
 
