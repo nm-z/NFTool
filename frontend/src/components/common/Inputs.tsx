@@ -38,6 +38,7 @@ export function ControlInput({
   max,
   step = 1,
   tooltip,
+  rangeScale = "linear",
 }: {
   label: string;
   value: string;
@@ -46,9 +47,35 @@ export function ControlInput({
   max?: number;
   step?: number;
   tooltip?: string;
+  rangeScale?: "linear" | "log";
 }) {
   const numValue = parseFloat(value);
   const [showHint, setShowHint] = useState(false);
+  const isLogScale =
+    rangeScale === "log" &&
+    min !== undefined &&
+    max !== undefined &&
+    min > 0 &&
+    max > 0 &&
+    max > min;
+  const sliderResolution = 1000;
+  const clamp = (v: number, minValue: number, maxValue: number) =>
+    Math.min(maxValue, Math.max(minValue, v));
+  const logMin = min ?? 1;
+  const logMax = max ?? logMin + 1;
+  const ratio = isLogScale ? logMax / logMin : 1;
+  const toLogValue = (t: number) => logMin * Math.pow(ratio, t);
+  const toLogPosition = (v: number) =>
+    Math.log(v / logMin) / Math.log(ratio);
+  const formatValue = (v: number) => {
+    const clamped = clamp(v, min ?? v, max ?? v);
+    if (!Number.isFinite(step) || step <= 0) {
+      return `${clamped}`;
+    }
+    const rounded = Math.round(clamped / step) * step;
+    const decimals = `${step}`.split(".")[1]?.length ?? 0;
+    return decimals > 0 ? rounded.toFixed(decimals) : `${Math.round(rounded)}`;
+  };
 
   return (
     <div className="space-y-3 py-3 border-b border-[#1e1e20]/50 last:border-0 group relative">
@@ -75,11 +102,41 @@ export function ControlInput({
       {min !== undefined && max !== undefined && (
         <input
           type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={isNaN(numValue) ? min : numValue}
-          onChange={(e) => onChange?.(e.target.value)}
+          min={isLogScale ? 0 : min}
+          max={isLogScale ? sliderResolution : max}
+          step={isLogScale ? 1 : step}
+          value={
+            isLogScale
+              ? Math.round(
+                  clamp(
+                    toLogPosition(
+                      clamp(
+                        isNaN(numValue) ? min : numValue,
+                        min,
+                        max,
+                      ),
+                    ),
+                    0,
+                    1,
+                  ) * sliderResolution,
+                )
+              : isNaN(numValue)
+                ? min
+                : numValue
+          }
+          onChange={(e) => {
+            if (!isLogScale) {
+              onChange?.(e.target.value);
+              return;
+            }
+            const t = clamp(
+              parseFloat(e.target.value) / sliderResolution,
+              0,
+              1,
+            );
+            const mappedValue = toLogValue(t);
+            onChange?.(formatValue(mappedValue));
+          }}
           className="w-full h-[2px] bg-[#2e2e30] rounded-full appearance-none accent-[#3b82f6] cursor-pointer hover:accent-[#60a5fa] transition-all"
         />
       )}

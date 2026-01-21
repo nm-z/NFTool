@@ -373,9 +373,10 @@ export function Inspector({
                     label="Max Epochs"
                     value={maxEpochs}
                     onChange={setMaxEpochs}
-                    min={0}
+                    min={1}
                     max={10000}
                     step={1}
+                    rangeScale="log"
                     tooltip="The maximum number of passes through the data for each trial."
                   />
                   <ControlInput
@@ -384,6 +385,7 @@ export function Inspector({
                     onChange={setPatience}
                     min={1}
                     max={1000}
+                    rangeScale="log"
                     tooltip="How many epochs to wait for improvement before giving up on a trial."
                   />
                   <ControlInput
@@ -393,6 +395,7 @@ export function Inspector({
                     min={2}
                     max={4096}
                     step={1}
+                    rangeScale="log"
                     tooltip="The number of training samples used in one iteration to update weights."
                   />
                   <ControlInput

@@ -201,17 +201,28 @@ class ConnectionManager:
             if int(getattr(ck, "id", 0)) <= last_ck:
                 continue
             fname = os.path.basename(str(getattr(ck, "model_path", "") or ""))
-            trial_num: int = 0
+            trial_num = int(getattr(ck, "trial", 0) or 0)
+            epoch_num = int(getattr(ck, "epoch", 0) or 0)
             r2_val = getattr(ck, "r2_score", None)
+            val_loss = float(getattr(ck, "val_loss", 0.0) or 0.0)
+            mae = float(getattr(ck, "mae", 0.0) or 0.0)
             try:
-                if "trial_" in fname:
+                if trial_num == 0 and "trial_" in fname:
                     part = fname.split("trial_")[-1]
                     trial_num = int(part.split(".")[0])
                 r2_float = float(r2_val) if r2_val is not None else None
             except (ValueError, IndexError, TypeError):
                 r2_float = None
             ck_tm = TelemetryMessage(
-                type="metrics", data=MetricData(trial=trial_num, r2=r2_float)
+                type="metrics",
+                data=MetricData(
+                    trial=trial_num,
+                    epoch=epoch_num,
+                    loss=val_loss,
+                    r2=r2_float,
+                    mae=mae,
+                    val_loss=val_loss,
+                ),
             )
             await self.broadcast(ck_tm)
             last_ck = max(last_ck, int(getattr(ck, "id", last_ck)))
@@ -372,10 +383,13 @@ class ConnectionManager:
                             fname = os.path.basename(
                                 str(getattr(ck, "model_path", "")) or ""
                             )
-                            trial_num: int = 0
+                            trial_num = int(getattr(ck, "trial", 0) or 0)
+                            epoch_num = int(getattr(ck, "epoch", 0) or 0)
                             r2_val = getattr(ck, "r2_score", None)
+                            val_loss = float(getattr(ck, "val_loss", 0.0) or 0.0)
+                            mae = float(getattr(ck, "mae", 0.0) or 0.0)
                             try:
-                                if "trial_" in fname:
+                                if trial_num == 0 and "trial_" in fname:
                                     part = fname.split("trial_")[-1]
                                     trial_num = int(part.split(".")[0])
                                 r2_float = float(r2_val) if r2_val is not None else None
@@ -385,10 +399,11 @@ class ConnectionManager:
                                 type="metrics",
                                 data=MetricData(
                                     trial=trial_num,
-                                    loss=None,
+                                    epoch=epoch_num,
+                                    loss=val_loss,
                                     r2=r2_float,
-                                    mae=None,
-                                    val_loss=None,
+                                    mae=mae,
+                                    val_loss=val_loss,
                                 ),
                             )
                             await self.broadcast(ck_tm)

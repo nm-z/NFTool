@@ -15,7 +15,7 @@ import torch
 from src.config import REPORTS_DIR, RESULTS_DIR
 from src.data.processing import load_dataset, preprocess_for_cnn
 from src.database.database import SESSION_LOCAL
-from src.database.models import ModelCheckpoint, Run
+from src.database.models import EpochMetric, ModelArtifact, ModelCheckpoint, Run
 from src.manager import manager as connection_manager_instance
 from src.models import architectures as architectures_module
 from src.schemas.training import TrainingConfig
@@ -70,6 +70,7 @@ def _send_status_sync(conn_mgr: Any, status_data: dict[str, Any]):
 
 def _prepare_data(
     db: Any,
+    run: Any,
     predictor_path: str,
     target_path: str,
     config: TrainingConfig,
@@ -122,8 +123,17 @@ def _prepare_data(
     y_train: Any = split_result[2]
     y_test: Any = split_result[3]
 
-    np.save(os.path.join(run_dir, "x_test.npy"), x_test)
-    np.save(os.path.join(run_dir, "y_test.npy"), y_test)
+    x_test_path = os.path.join(run_dir, "x_test.npy")
+    y_test_path = os.path.join(run_dir, "y_test.npy")
+    np.save(x_test_path, x_test)
+    np.save(y_test_path, y_test)
+
+    # Persist artifact paths for reproducibility.
+    db.add(ModelArtifact(run_id=run.id, kind="scaler_x", path=scaler_x_path))
+    db.add(ModelArtifact(run_id=run.id, kind="scaler_y", path=scaler_y_path))
+    db.add(ModelArtifact(run_id=run.id, kind="x_test", path=x_test_path))
+    db.add(ModelArtifact(run_id=run.id, kind="y_test", path=y_test_path))
+    db.commit()
 
     val_rel = config.val_ratio / (config.train_ratio + config.val_ratio)
     split_result2 = sk_model.train_test_split(
@@ -194,7 +204,7 @@ def run_training_task(
             y_train, y_val, y_test,
             sx_p, sy_p, _sx, sy,
         ) = _prepare_data(
-            db, str(config.predictor_path), str(config.target_path),
+            db, run, str(config.predictor_path), str(config.target_path),
             config, run_dir, run_id, conn_mgr,
         )
 
@@ -217,6 +227,15 @@ def run_training_task(
                 "type": "info", "epoch": epoch,
             })
             run_any.logs = logs
+            db.add(EpochMetric(
+                run_id=run.id,
+                trial=cur_trial,
+                epoch=epoch,
+                loss=loss,
+                r2=r2,
+                mae=mae,
+                val_loss=v_loss,
+            ))
             db.commit()
 
         def on_checkpoint(
@@ -278,9 +297,17 @@ def _save_checkpoint(
         is_new_best = True
 
     db.add(ModelCheckpoint(
-        run_id=run.id, model_path=checkpoint_path,
-        scaler_path=sx_p, r2_score=r2, params={},
+        run_id=run.id,
+        model_path=checkpoint_path,
+        scaler_path=sx_p,
+        r2_score=r2,
+        epoch=epoch,
+        trial=trial_num,
+        val_loss=loss,
+        mae=mae,
+        params={},
     ))
+    db.add(ModelArtifact(run_id=run.id, kind="checkpoint", path=checkpoint_path))
 
     metric_point = {
         "trial": trial_num, "epoch": epoch, "loss": loss, "r2": r2,
@@ -289,6 +316,8 @@ def _save_checkpoint(
     hist = list(getattr(run, "metrics_history", []) or [])
     hist.append(metric_point)
     run.metrics_history = hist
+    if is_new_best:
+        db.add(ModelArtifact(run_id=run.id, kind="best_model", path=best_path))
     db.commit()
 
     _send_metrics_sync(conn_mgr, metric_point)
@@ -360,6 +389,21 @@ def _finalize_run(
         y_p_orig = scaler_y.inverse_transform(y_pred.reshape(-1, 1)).flatten()
         generate_regression_plots(y_t_orig, y_p_orig, RESULTS_DIR)
         generate_regression_plots(y_t_orig, y_p_orig, run_dir)
+
+    def record_artifacts(dir_path: str, kind: str) -> None:
+        if not os.path.isdir(dir_path):
+            return
+        for root, _dirs, files in os.walk(dir_path):
+            for name in files:
+                db.add(ModelArtifact(
+                    run_id=run.id,
+                    kind=kind,
+                    path=os.path.join(root, name),
+                ))
+
+    record_artifacts(run_dir, "report")
+    record_artifacts(RESULTS_DIR, "result")
+    run.report_path = run_dir
 
     run.status = "completed"
     db.commit()

@@ -120,6 +120,11 @@ async def start_training(
             status="pending",
             optuna_trials=config.optuna_trials,
             config=config_dump,
+            progress=0,
+            current_trial=0,
+            best_r2=-1.0e9,
+            report_path="",
+            metrics_history=[],
             logs=[],
         )
     )

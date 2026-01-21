@@ -17,7 +17,7 @@ REPO_ROOT = str(CURRENT_FILE.parent.parent)
 WORKSPACE_DIR = os.getenv("WORKSPACE_DIR", os.path.join(REPO_ROOT, "workspace"))
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    f"sqlite:///{os.path.join(WORKSPACE_DIR, 'nftool.db')}",
+    f"sqlite:///{os.path.join(WORKSPACE_DIR, 'nftool_full.db')}",
 )
 API_KEY = os.getenv("API_KEY", "plyo")
 
