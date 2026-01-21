@@ -145,3 +145,32 @@ Configured for AMD ROCm on RDNA3 hardware. Docker-level device passthrough enabl
 
 ### SNR Calculation
 Uses `RidgeCV` with leave-one-out cross-validation to provide regularized SNR estimates, preventing optimistic bias in high-dimensional feature spaces.
+
+## Important Constraints and Common Issues
+
+### BatchNorm Batch Size Requirement
+**Critical**: CNN models use `BatchNorm1d` layers which require **batch_size >= 2**. Single-sample batches will fail with:
+```
+ValueError: Expected more than 1 value per channel when training
+```
+
+**Solutions implemented:**
+- Frontend: Batch size slider minimum is set to 2 in `Inspector.tsx`
+- Backend: DataLoader uses `drop_last=True` to prevent incomplete batches (training/engine.py:52,147)
+
+### Training Update Frequency
+- Optuna trials update **once per epoch**, not per batch
+- The `on_epoch_end` callback fires after each full epoch completes
+- Live metrics (loss, R², MAE) are calculated and broadcast after each epoch
+- WebSocket clients receive real-time updates via `TelemetryMessage` broadcasts
+
+### Database Schema
+The SQLite database (`workspace/nftool.db`) stores runs with JSON columns:
+- `logs`: Array of `{time, msg, type, epoch}` objects
+- `metrics_history`: Array of `{trial, epoch, loss, r2, mae, val_loss}` objects
+- `config`: Full training configuration as JSON
+
+Logs and metrics are stored in-process during training and persisted to disk for WebSocket polling.
+
+### Frontend Development
+After modifying frontend code, users must **refresh the browser** to see changes. The Next.js dev server hot-reloads JavaScript but state persists in Zustand stores.
