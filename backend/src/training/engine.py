@@ -49,7 +49,7 @@ def train_model(
 
     train_dataset = TensorDataset(x_train, y_train)
     actual_batch_size = min(batch_size, max(1, len(x_train)))
-    train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True, drop_last=True)
 
     best_val_loss = float("inf")
     best_model_state = None
@@ -144,7 +144,7 @@ def train_cnn_model(
 
     train_dataset = TensorDataset(x_train, y_train)
     actual_batch_size = min(batch_size, max(1, len(x_train)))
-    train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=actual_batch_size, shuffle=True, drop_last=True)
 
     best_val_loss = float("inf")
     best_model_state = None

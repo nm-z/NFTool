@@ -167,6 +167,11 @@ def run_training_task(
             conn_mgr, "info",
         )
 
+        db_log_and_broadcast(
+            db, run_id, f"Config: model={config.model_choice}, trials={config.optuna_trials}, epochs={config.max_epochs}, batch={config.batch_size}",
+            conn_mgr, "info",
+        )
+
         if config.device == "cuda" and torch.cuda.is_available():
             device_limit = torch.cuda.device_count() - 1
             gpu_id = min(config.gpu_id, device_limit)
@@ -233,12 +238,18 @@ def run_training_task(
         )
 
         opt_name = f"NFTool_{config.model_choice}"
-        study = run_optimization(opt_name, config.optuna_trials, None, obj)
-
-        _finalize_run(
-            db, run, run_dir, study, device, x_test, y_test,
-            sy, conn_mgr, run_id, config,
-        )
+        try:
+            study = run_optimization(opt_name, config.optuna_trials, None, obj)
+            _finalize_run(
+                db, run, run_dir, study, device, x_test, y_test,
+                sy, conn_mgr, run_id, config,
+            )
+        except Exception as exc:
+            error_msg = f"Training failed: {exc.__class__.__name__}: {exc}"
+            db_log_and_broadcast(db, run_id, error_msg, conn_mgr, "error")
+            run.status = "failed"
+            db.commit()
+            raise
 
 
 def _save_checkpoint(
