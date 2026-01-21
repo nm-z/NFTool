@@ -99,7 +99,7 @@ export function Inspector({
                     <select
                       value={selectedPredictor}
                       onChange={(e) => setSelectedPredictor(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-[hsl(var(--primary))] transition-colors"
                     >
                       {datasets?.map((d: { name?: string; path?: string }) => (
                         <option key={d.path} value={d.path}>
@@ -115,7 +115,7 @@ export function Inspector({
                     <select
                       value={selectedTarget}
                       onChange={(e) => setSelectedTarget(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-[hsl(var(--primary))] transition-colors"
                     >
                       {datasets?.map((d: { name?: string; path?: string }) => (
                         <option key={d.path} value={d.path}>
@@ -134,7 +134,7 @@ export function Inspector({
                       Base Class
                       <Info
                         size={10}
-                        className="text-zinc-600 group-hover:text-blue-500 transition-colors"
+                        className="text-zinc-600 group-hover:text-[hsl(var(--primary))] transition-colors"
                       />
                     </label>
                     <div className="grid grid-cols-2 bg-zinc-900 border border-zinc-800 rounded p-0.5">
@@ -305,7 +305,7 @@ export function Inspector({
                     <div className="grid grid-cols-2 bg-zinc-900 border border-zinc-800 rounded p-0.5">
                       <button
                         onClick={() => setDeviceChoice("cuda")}
-                        className={`py-1 rounded text-[10px] font-bold transition-all ${deviceChoice === "cuda" ? "bg-blue-500 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                        className={`py-1 rounded text-[10px] font-bold transition-all ${deviceChoice === "cuda" ? "bg-[hsl(var(--primary))] text-[hsl(var(--foreground-active))]" : "text-zinc-500 hover:text-zinc-300"}`}
                       >
                         GPU (CUDA)
                       </button>
@@ -340,7 +340,7 @@ export function Inspector({
                               setError(`GPU Refresh Failed: ${msg}`);
                             }
                           }}
-                          className="text-[8px] font-bold text-blue-500 hover:text-blue-400 uppercase flex items-center gap-1"
+                          className="text-[8px] font-bold text-[hsl(var(--primary))] hover:text-[hsl(var(--primary-soft))] uppercase flex items-center gap-1"
                         >
                           <RefreshCw size={8} /> Refresh
                         </button>
@@ -352,7 +352,7 @@ export function Inspector({
                           onChange={(e) =>
                             setGpuChoice(parseInt(e.target.value))
                           }
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-[hsl(var(--primary))] transition-colors"
                         >
                           {gpuList.map((gpu: { id: number; name: string }) => (
                             <option key={gpu.id} value={gpu.id}>
@@ -361,7 +361,7 @@ export function Inspector({
                           ))}
                         </select>
                       ) : (
-                        <div className="w-full bg-zinc-900 border border-red-500/20 rounded px-2.5 py-1.5 text-[10px] text-red-400 font-bold italic flex items-center gap-2">
+                        <div className="w-full bg-zinc-900 border border-[hsl(var(--danger)/0.2)] rounded px-2.5 py-1.5 text-[10px] text-[hsl(var(--danger))] font-bold italic flex items-center gap-2">
                           <AlertCircle size={10} />
                           No CUDA GPUs Detected
                         </div>

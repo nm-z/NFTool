@@ -181,6 +181,18 @@ def run_training_task(
             db, run_id, f"Config: model={config.model_choice}, trials={config.optuna_trials}, epochs={config.max_epochs}, batch={config.batch_size}",
             conn_mgr, "info",
         )
+        split_ratio_msg = (
+            f"Seed={config.seed} | split=train={config.train_ratio:.2f}, "
+            f"val={config.val_ratio:.2f}, test={config.test_ratio:.2f}"
+        )
+        extra_split: list[str] = []
+        if getattr(config, "split_id", None):
+            extra_split.append(f"split_id={config.split_id}")
+        if getattr(config, "fold_index", None) is not None:
+            extra_split.append(f"fold={config.fold_index}")
+        if extra_split:
+            split_ratio_msg = f"{split_ratio_msg} | " + ", ".join(extra_split)
+        db_log_and_broadcast(db, run_id, split_ratio_msg, conn_mgr, "info")
 
         if config.device == "cuda" and torch.cuda.is_available():
             device_limit = torch.cuda.device_count() - 1
@@ -223,7 +235,11 @@ def run_training_task(
             logs = list(getattr(run, "logs", []) or [])
             logs.append({
                 "time": datetime.now().strftime("%H:%M:%S"),
-                "msg": f"Epoch {epoch}/{n_eps}: v_loss={v_loss:.6f}, r2={r2:.4f}, mae={mae:.4f}",
+                "msg": (
+                    f"Trial {cur_trial + 1}/{config.optuna_trials} "
+                    f"Epoch {epoch}/{n_eps}: "
+                    f"v_loss={v_loss:.6f}, r2={r2:.4f}, mae={mae:.4f}"
+                ),
                 "type": "info", "epoch": epoch,
             })
             run_any.logs = logs
@@ -249,6 +265,30 @@ def run_training_task(
 
         params = config.model_dump()
         params["on_epoch_end"] = on_epoch_end
+
+        def on_trial_start(trial_num: int, params_dict: dict[str, Any]) -> None:
+            ordered_keys = sorted(params_dict.keys())
+            parts: list[str] = []
+            for key in ordered_keys:
+                val = params_dict.get(key)
+                if isinstance(val, float):
+                    parts.append(f"{key}={val:.6g}")
+                else:
+                    parts.append(f"{key}={val}")
+            msg = (
+                f"Trial {trial_num + 1}/{config.optuna_trials} params: "
+                + ", ".join(parts)
+            )
+            db_log_and_broadcast(db, run_id, msg, conn_mgr, "optuna")
+
+        params["on_trial_start"] = on_trial_start
+        def on_trial_end(trial_num: int, best_epoch: int, best_val_r2: float) -> None:
+            msg = (
+                f"Trial {trial_num + 1}/{config.optuna_trials} summary: "
+                f"best_epoch={best_epoch}, best_val_r2={best_val_r2:.4f}"
+            )
+            db_log_and_broadcast(db, run_id, msg, conn_mgr, "optuna")
+        params["on_trial_end"] = on_trial_end
 
         obj = _make_tracked_objective(
             db, run, run_id, conn_mgr, config,

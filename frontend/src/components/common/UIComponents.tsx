@@ -1,6 +1,7 @@
 import React from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { LucideIcon } from "lucide-react";
+import { Tooltip } from "./Tooltip";
 
 export function NavIcon({
   icon: Icon,
@@ -14,19 +15,18 @@ export function NavIcon({
   tooltip: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`p-2.5 rounded-md transition-all relative group ${active ? "text-[hsl(var(--foreground-active))] bg-[hsl(var(--panel-lighter))]" : "text-[#52525b] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--panel-lighter))]/50"}`}
-    >
-      <Icon size={20} strokeWidth={active ? 2.5 : 2} />
-      {active && (
-        <div className="absolute left-[-4px] top-2 bottom-2 w-[3px] bg-[#3b82f6] rounded-r-full"></div>
-      )}
-      <div className="absolute left-[64px] bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground-active))] text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity delay-[1500ms] whitespace-nowrap pointer-events-none border border-[hsl(var(--border-muted))] shadow-xl z-50">
-        {tooltip}
-      </div>
-    </button>
+    <Tooltip content={tooltip} side="right" align="center" sideOffset={12}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`p-2.5 rounded-md transition-all relative ${active ? "text-[hsl(var(--foreground-active))] bg-[hsl(var(--panel-lighter))]" : "text-[hsl(var(--foreground-dim))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--panel-lighter))]/50"}`}
+      >
+        <Icon size={20} strokeWidth={active ? 2.5 : 2} />
+        {active && (
+          <div className="absolute left-[-4px] top-2 bottom-2 w-[3px] bg-[hsl(var(--primary))] rounded-r-full"></div>
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -40,16 +40,15 @@ export function IconButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="p-1.5 rounded hover:bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground))] hover:text-[hsl(var(--foreground-active))] transition-all relative group"
-    >
-      <Icon size={16} />
-      <div className="absolute top-[32px] left-1/2 -translate-x-1/2 bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground-active))] text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity delay-[1500ms] whitespace-nowrap pointer-events-none border border-[hsl(var(--border-muted))] shadow-xl z-50">
-        {tooltip}
-      </div>
-    </button>
+    <Tooltip content={tooltip} side="bottom" align="center" sideOffset={10}>
+      <button
+        type="button"
+        onClick={onClick}
+        className="p-1.5 rounded hover:bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground))] hover:text-[hsl(var(--foreground-active))] transition-all"
+      >
+        <Icon size={16} />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -64,7 +63,9 @@ export function ResourceBadge({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[#52525b] font-bold">{label}</span>
+      <span className="text-[hsl(var(--foreground-dim))] font-bold">
+        {label}
+      </span>
       <span
         className={`font-mono ${color || "text-[hsl(var(--foreground-active))]"}`}
       >
@@ -78,7 +79,7 @@ export function TabTrigger({ value, label }: { value: string; label: string }) {
   return (
     <Tabs.Trigger
       value={value}
-      className="flex-1 text-[11px] font-medium py-1.5 rounded-md transition-all data-[state=active]:bg-[#3b82f6] data-[state=active]:text-[hsl(var(--foreground-active))] text-[hsl(var(--foreground))] hover:text-[hsl(var(--foreground-active))] outline-none"
+      className="flex-1 text-[11px] font-medium py-1.5 rounded-md transition-all data-[state=active]:bg-[hsl(var(--primary))] data-[state=active]:text-[hsl(var(--foreground-active))] text-[hsl(var(--foreground))] hover:text-[hsl(var(--foreground-active))] outline-none"
     >
       {label}
     </Tabs.Trigger>

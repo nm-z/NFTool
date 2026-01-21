@@ -17,7 +17,7 @@ function CommandItem({
       onSelect={() => onSelect?.()}
       className="flex items-center gap-3 px-4 py-2 text-[13px] cursor-default select-none aria-selected:bg-[hsl(var(--panel-lighter))] aria-selected:text-[hsl(var(--foreground-active))] rounded-md mx-2 transition-colors outline-none"
     >
-      <Icon size={16} className="text-[#52525b]" />
+      <Icon size={16} className="text-[hsl(var(--foreground-dim))]" />
       {label}
     </Command.Item>
   );
@@ -41,7 +41,7 @@ export function CommandPalette({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/60 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-[hsl(var(--background)/0.6)] backdrop-blur-[2px]">
       <div className="w-[640px] max-h-[400px]">
         <Command
           label="Command Palette"
@@ -53,12 +53,12 @@ export function CommandPalette({
             className="w-full bg-[hsl(var(--panel-lighter))] border border-[hsl(var(--border-muted))] text-[hsl(var(--foreground-active))] px-4 py-3 rounded-t-lg outline-none"
           />
           <Command.List className="bg-[hsl(var(--panel))] border-x border-b border-[hsl(var(--border-muted))] rounded-b-lg overflow-y-auto max-h-[300px] custom-scrollbar p-2">
-            <Command.Empty className="p-4 text-[12px] text-[#52525b]">
+            <Command.Empty className="p-4 text-[12px] text-[hsl(var(--foreground-dim))]">
               No results found.
             </Command.Empty>
             <Command.Group
               heading="Execution"
-              className="text-[10px] text-[#52525b] uppercase font-bold px-2 py-1"
+              className="text-[10px] text-[hsl(var(--foreground-dim))] uppercase font-bold px-2 py-1"
             >
               <CommandItem
                 icon={Play}
@@ -79,7 +79,7 @@ export function CommandPalette({
             </Command.Group>
             <Command.Group
               heading="Workspace"
-              className="text-[10px] text-[#52525b] uppercase font-bold px-2 py-1 mt-2"
+              className="text-[10px] text-[hsl(var(--foreground-dim))] uppercase font-bold px-2 py-1 mt-2"
             >
               <CommandItem
                 icon={Layers}

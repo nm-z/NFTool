@@ -46,6 +46,8 @@ class TrainingConfig(BaseModel):
     batch_size: int = Field(default=32, ge=1, le=4096)
     device: str = Field(default="cuda", pattern="^(cuda|cpu)$")
     gpu_id: int = Field(default=0, ge=0)
+    split_id: str | None = None
+    fold_index: int | None = Field(default=None, ge=0)
     # Allow empty strings so schemathesis-generated cases without file paths
     # don't cause a 422; we'll validate/fill these server-side when starting.
     predictor_path: str | None = Field(default="")
@@ -79,6 +81,7 @@ class TrainingConfig(BaseModel):
             "max_epochs",
             "batch_size",
             "gpu_id",
+            "fold_index",
         ]
         float_fields = [
             "train_ratio",

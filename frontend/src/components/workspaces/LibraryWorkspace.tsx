@@ -14,9 +14,23 @@ import {
   File,
   UploadCloud,
 } from "lucide-react";
+import {
+  LineChart as RechartsLineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  ScatterChart,
+  Scatter,
+  ReferenceLine,
+} from "recharts";
 
 import { TabTrigger } from "../common/UIComponents";
-import { SummaryCard, PlotCard } from "../common/Cards";
+import { SummaryCard } from "../common/Cards";
 import { useTrainingStore } from "@/store/useTrainingStore";
 
 const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
@@ -34,6 +48,7 @@ type RunRecord = {
   timestamp?: string;
   report_path?: string;
   optuna_trials?: number;
+  metrics_history?: MetricPoint[];
   [k: string]: unknown;
 };
 
@@ -43,6 +58,32 @@ type AssetNode = {
   path: string;
   size?: number;
   children?: AssetNode[];
+};
+
+type MetricPoint = {
+  trial?: number;
+  epoch?: number;
+  loss?: number;
+  r2?: number;
+  mae?: number;
+  val_loss?: number;
+};
+
+type EvalComparison = {
+  index: number;
+  actual: number;
+  predicted: number;
+  abs_error: number;
+  percent_error: number;
+};
+
+type EvalResult = {
+  run_id: string;
+  accuracy_percent: number;
+  mape_percent: number;
+  r2_score: number;
+  count: number;
+  comparisons: EvalComparison[];
 };
 
 export function LibraryWorkspace() {
@@ -184,7 +225,7 @@ export function LibraryWorkspace() {
           </div>
           <button
             onClick={() => handleDownload(node)}
-            className="text-[9px] uppercase font-bold text-blue-400 hover:text-blue-300"
+            className="text-[9px] uppercase font-bold text-[hsl(var(--primary-soft))] hover:text-[hsl(var(--primary))]"
           >
             Download
           </button>
@@ -227,11 +268,11 @@ export function LibraryWorkspace() {
           >
             <div className="h-12 border-b border-zinc-800 flex items-center px-6 bg-zinc-900/30 gap-4">
               <div className="flex items-center gap-2 flex-1 max-w-sm">
-                <Search size={14} className="text-[#52525b]" />
+                <Search size={14} className="text-[hsl(var(--foreground-dim))]" />
                 <input
                   type="text"
                   placeholder="Filter run history..."
-                  className="bg-transparent border-none outline-none text-[11px] w-full placeholder-[#3f3f46]"
+                  className="bg-transparent border-none outline-none text-[11px] w-full placeholder-[hsl(var(--foreground-subtle))]"
                   data-testid="input-filter-history"
                 />
               </div>
@@ -242,7 +283,7 @@ export function LibraryWorkspace() {
                   className="w-full text-left text-[12px]"
                   suppressHydrationWarning
                 >
-                  <thead className="bg-zinc-900 text-[#52525b] font-bold">
+                  <thead className="bg-zinc-900 text-[hsl(var(--foreground-dim))] font-bold">
                     <tr>
                       <th className="px-6 py-3 border-b border-zinc-800">
                         RUN_ID
@@ -267,7 +308,7 @@ export function LibraryWorkspace() {
                         data-testid={`run-row-${run.run_id}`}
                         className="border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer group"
                       >
-                        <td className="px-6 py-4 text-[#3b82f6] group-hover:text-[#60a5fa] font-bold">
+                        <td className="px-6 py-4 text-[hsl(var(--primary))] group-hover:text-[hsl(var(--primary-soft))] font-bold">
                           #{run.run_id}
                         </td>
                         <td className="px-6 py-4">{run.model_choice}</td>
@@ -275,12 +316,12 @@ export function LibraryWorkspace() {
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                               run.status === "completed"
-                                ? "bg-green-500/10 text-green-400"
+                                ? "bg-[hsl(var(--success)/0.1)] text-[hsl(var(--success))]"
                                 : run.status === "failed"
-                                  ? "bg-red-500/10 text-red-400"
+                                  ? "bg-[hsl(var(--danger)/0.1)] text-[hsl(var(--danger))]"
                                   : run.status === "running"
-                                    ? "bg-blue-500/10 text-blue-400 animate-pulse"
-                                    : "bg-yellow-500/10 text-yellow-400"
+                                    ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary-soft))] animate-pulse"
+                                    : "bg-[hsl(var(--warning)/0.1)] text-[hsl(var(--warning))]"
                             }`}
                           >
                             {run.status}
@@ -328,7 +369,7 @@ export function LibraryWorkspace() {
                       value={datasetFolderName}
                       onChange={(e) => setDatasetFolderName(e.target.value)}
                       placeholder="e.g. Hold-2"
-                      className="mt-1 w-full bg-black border border-zinc-800 rounded px-3 py-2 text-[11px] text-white focus:outline-none focus:border-blue-500"
+                      className="mt-1 w-full bg-black border border-zinc-800 rounded px-3 py-2 text-[11px] text-white focus:outline-none focus:border-[hsl(var(--primary))]"
                     />
                   </div>
                   <div>
@@ -358,7 +399,7 @@ export function LibraryWorkspace() {
                   <button
                     onClick={handleUpload}
                     disabled={isUploading}
-                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold uppercase rounded disabled:opacity-60"
+                    className="px-4 py-2 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-strong))] text-[hsl(var(--foreground-active))] text-[10px] font-bold uppercase rounded disabled:opacity-60"
                   >
                     {isUploading ? "Uploading..." : "Upload"}
                   </button>
@@ -392,6 +433,61 @@ export function LibraryWorkspace() {
   );
 }
 
+function ChartCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border border-[hsl(var(--border))] rounded-xl overflow-hidden bg-[hsl(var(--panel))]/50 flex flex-col">
+      <div className="px-4 py-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--panel))]">
+        <span className="text-[10px] font-bold uppercase text-[hsl(var(--foreground-dim))]">
+          {title}
+        </span>
+      </div>
+      <div className="flex-1 p-3 min-h-[300px] flex items-center justify-center">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EmptyChart({ message }: { message: string }) {
+  return (
+    <div className="text-[10px] text-zinc-600 text-center">{message}</div>
+  );
+}
+
+function buildResidualBins(comparisons: EvalComparison[], binCount = 24) {
+  if (!comparisons.length) return [];
+  const residuals = comparisons.map((c) => c.predicted - c.actual);
+  const min = Math.min(...residuals);
+  const max = Math.max(...residuals);
+  const span = max - min;
+  const safeSpan = span === 0 ? 1 : span;
+  const step = safeSpan / binCount;
+  const bins: Array<{ bin: number; label: string; count: number }> = [];
+  for (let i = 0; i < binCount; i += 1) {
+    const start = min + i * step;
+    const end = start + step;
+    bins.push({
+      bin: start + step / 2,
+      label: `${start.toFixed(3)} – ${end.toFixed(3)}`,
+      count: 0,
+    });
+  }
+  for (const res of residuals) {
+    const idx = Math.max(
+      0,
+      Math.min(binCount - 1, Math.floor((res - min) / step)),
+    );
+    bins[idx].count += 1;
+  }
+  return bins;
+}
+
 function RunDetailView({
   run,
   onBack,
@@ -400,6 +496,116 @@ function RunDetailView({
   onBack: () => void;
 }) {
   const { setLoadedModelPath, setActiveWorkspace, addLog } = useTrainingStore();
+  const [evaluation, setEvaluation] = useState<EvalResult | null>(null);
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
+
+  const metricsHistory = React.useMemo(
+    () =>
+      Array.isArray(run.metrics_history)
+        ? (run.metrics_history as MetricPoint[])
+        : [],
+    [run.metrics_history],
+  );
+
+  const dedupedMetrics = React.useMemo(() => {
+    const seen = new Map<string, MetricPoint>();
+    metricsHistory.forEach((point, index) => {
+      const trialVal = typeof point.trial === "number" ? point.trial : 0;
+      const epochVal = typeof point.epoch === "number" ? point.epoch : index;
+      seen.set(`${trialVal}-${epochVal}`, point);
+    });
+    return Array.from(seen.values());
+  }, [metricsHistory]);
+
+  const chartData = React.useMemo(
+    () =>
+      dedupedMetrics.map((point, index) => ({
+        ...point,
+        step: index,
+      })),
+    [dedupedMetrics],
+  );
+
+  const trialData = React.useMemo(() => {
+    const trialMap = new Map<number, { trial: number; bestR2: number; minVal: number }>();
+    for (const point of metricsHistory) {
+      const trialVal = typeof point.trial === "number" ? point.trial : 0;
+      const r2Val = typeof point.r2 === "number" ? point.r2 : Number.NEGATIVE_INFINITY;
+      const valLoss = typeof point.val_loss === "number" ? point.val_loss : Number.POSITIVE_INFINITY;
+      const current = trialMap.get(trialVal) || {
+        trial: trialVal,
+        bestR2: Number.NEGATIVE_INFINITY,
+        minVal: Number.POSITIVE_INFINITY,
+      };
+      current.bestR2 = Math.max(current.bestR2, r2Val);
+      current.minVal = Math.min(current.minVal, valLoss);
+      trialMap.set(trialVal, current);
+    }
+    return Array.from(trialMap.values())
+      .sort((a, b) => a.trial - b.trial)
+      .map((item) => ({
+        trial: item.trial + 1,
+        best_r2: Number.isFinite(item.bestR2) ? item.bestR2 : 0,
+        val_loss: Number.isFinite(item.minVal) ? item.minVal : 0,
+      }));
+  }, [metricsHistory]);
+
+  const evalComparisons = React.useMemo(
+    () => evaluation?.comparisons ?? [],
+    [evaluation?.comparisons],
+  );
+  const residualBins = React.useMemo(
+    () => buildResidualBins(evalComparisons),
+    [evalComparisons],
+  );
+
+  React.useEffect(() => {
+    if (!run.run_id || run.status !== "completed") return;
+    let cancelled = false;
+    const fetchEvaluation = async () => {
+      setEvaluationLoading(true);
+      setEvaluationError(null);
+      try {
+        const res = await fetch(`${API_BASE}/training/inference/evaluate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": API_KEY,
+          },
+          body: JSON.stringify({
+            run_id: String(run.run_id),
+            max_points: 1000,
+          }),
+        });
+        if (!res.ok) {
+          let errText = "Evaluation failed";
+          try {
+            const errJson = await res.json();
+            errText = errJson?.detail || errText;
+          } catch {
+            errText = await res.text();
+          }
+          throw new Error(errText || "Evaluation failed");
+        }
+        const data = (await res.json()) as EvalResult;
+        if (!cancelled) {
+          setEvaluation(data);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setEvaluationError(msg || "Evaluation error");
+        }
+      } finally {
+        if (!cancelled) setEvaluationLoading(false);
+      }
+    };
+    fetchEvaluation();
+    return () => {
+      cancelled = true;
+    };
+  }, [run.run_id, run.status]);
 
   const handleExport = async () => {
     try {
@@ -493,7 +699,7 @@ function RunDetailView({
           <button
             onClick={onBack}
             data-testid="btn-back-to-history"
-            className="p-1.5 hover:bg-zinc-800 rounded text-[#52525b] hover:text-white transition-all"
+            className="p-1.5 hover:bg-zinc-800 rounded text-[hsl(var(--foreground-dim))] hover:text-white transition-all"
           >
             <ChevronRight size={16} className="rotate-180" />
           </button>
@@ -505,7 +711,7 @@ function RunDetailView({
           <button
             onClick={handleExport}
             data-testid="btn-export-weights"
-            className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-[#52525b] hover:text-white bg-zinc-900 border border-zinc-800 transition-all"
+            className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-[hsl(var(--foreground-dim))] hover:text-white bg-zinc-900 border border-zinc-800 transition-all"
           >
             <Download size={12} />
             Export Weights
@@ -513,7 +719,7 @@ function RunDetailView({
           <button
             onClick={handleDeploy}
             data-testid="btn-deploy-playground"
-            className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-white bg-[#22c55e] hover:bg-[#16a34a] transition-all"
+            className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-[hsl(var(--foreground-active))] bg-[hsl(var(--success))] hover:bg-[hsl(var(--success-strong))] transition-all"
           >
             <Rocket size={12} />
             Deploy to Playground
@@ -521,7 +727,7 @@ function RunDetailView({
           <button
             onClick={handleViewReport}
             data-testid="link-view-report"
-            className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-white bg-[#3b82f6] hover:bg-[#2563eb] transition-all"
+            className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-[hsl(var(--foreground-active))] bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-strong))] transition-all"
           >
             <FileText size={12} />
             View Report
@@ -558,7 +764,7 @@ function RunDetailView({
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-[11px] uppercase font-bold tracking-widest text-[#52525b]">
+          <h3 className="text-[11px] uppercase font-bold tracking-widest text-[hsl(var(--foreground-dim))]">
             Generated Analytics
           </h3>
           {run.status !== "completed" ? (
@@ -567,41 +773,221 @@ function RunDetailView({
             </div>
           ) : (
             <>
-              <div className="text-[10px] text-zinc-500">
-                Run assets are served from the report directory for this run.
-              </div>
-              {run.run_id ? null : (
-                <div className="text-[10px] text-yellow-500">
-                  Missing run id; plot links may be unavailable.
-                </div>
-              )}
               <div className="grid grid-cols-2 gap-6">
-                {(() => {
-                  const runId = run.run_id ? String(run.run_id) : "";
-                  const base = runId
-                    ? `${API_ROOT}/reports/${runId}`
-                    : `${API_ROOT}/results`;
-                  return (
-                    <>
-                      <PlotCard
-                        title="Optimization History"
-                        src={`${base}/optuna_optimization_history.png`}
-                      />
-                      <PlotCard
-                        title="Parameter Importances"
-                        src={`${base}/optuna_param_importances.png`}
-                      />
-                      <PlotCard
-                        title="Pred vs Actual"
-                        src={`${base}/predicted_vs_actual.png`}
-                      />
-                      <PlotCard
-                        title="Residual Distribution"
-                        src={`${base}/residual_distribution.png`}
-                      />
-                    </>
-                  );
-                })()}
+                <ChartCard title="Optimization History">
+                  {chartData.length === 0 ? (
+                    <EmptyChart message="No metrics history recorded for this run." />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <RechartsLineChart
+                        data={chartData}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="hsl(var(--border-strong))"
+                          vertical={false}
+                          horizontal={true}
+                        />
+                        <XAxis dataKey="step" hide />
+                        <YAxis
+                          yAxisId="left"
+                          stroke="hsl(var(--foreground-subtle))"
+                          tick={{
+                            fill: "hsl(var(--foreground-dim))",
+                            fontSize: 9,
+                            fontWeight: 600,
+                          }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          yAxisId="right"
+                          orientation="right"
+                          stroke="hsl(var(--foreground-subtle))"
+                          tick={{
+                            fill: "hsl(var(--foreground-dim))",
+                            fontSize: 9,
+                            fontWeight: 600,
+                          }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border-strong))",
+                            borderRadius: "6px",
+                            fontSize: "10px",
+                            color: "hsl(var(--foreground-active))",
+                          }}
+                          itemStyle={{ padding: "2px 0" }}
+                          cursor={{
+                            stroke: "hsl(var(--border-strong))",
+                            strokeWidth: 1,
+                          }}
+                          labelFormatter={(_label, payload) => {
+                            const entry = Array.isArray(payload)
+                              ? payload[0]?.payload
+                              : undefined;
+                            if (!entry) return "Step";
+                            const trialLabel =
+                              entry.trial != null ? `Trial ${entry.trial + 1}` : "Trial ?";
+                            const epochLabel =
+                              entry.epoch != null ? `Epoch ${entry.epoch}` : "Epoch ?";
+                            return `${trialLabel} • ${epochLabel}`;
+                          }}
+                          formatter={(value: number, name: string) => {
+                            const precision = name === "val_loss" ? 6 : 4;
+                            const label = name === "val_loss" ? "Val Loss" : "R²";
+                            return [value?.toFixed(precision) ?? "—", label];
+                          }}
+                        />
+                        <Line
+                          yAxisId="left"
+                          type="monotone"
+                          dataKey="val_loss"
+                          stroke="hsl(var(--danger))"
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                        <Line
+                          yAxisId="right"
+                          type="monotone"
+                          dataKey="r2"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </RechartsLineChart>
+                    </ResponsiveContainer>
+                  )}
+                </ChartCard>
+
+                <ChartCard title="Trial Performance (Best R²)">
+                  {trialData.length === 0 ? (
+                    <EmptyChart message="No trial summaries available." />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={trialData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border-strong))" vertical={false} />
+                        <XAxis dataKey="trial" hide />
+                        <YAxis
+                          stroke="hsl(var(--foreground-subtle))"
+                          tick={{ fill: "hsl(var(--foreground-dim))", fontSize: 9, fontWeight: 600 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border-strong))",
+                            borderRadius: "6px",
+                            fontSize: "10px",
+                            color: "hsl(var(--foreground-active))",
+                          }}
+                          formatter={(value: number) => [value?.toFixed(4) ?? "—", "Best R²"]}
+                        />
+                        <Bar dataKey="best_r2" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </ChartCard>
+
+                <ChartCard title="Pred vs Actual">
+                  {evaluationLoading ? (
+                    <EmptyChart message="Loading evaluation data..." />
+                  ) : evaluationError ? (
+                    <EmptyChart message={evaluationError} />
+                  ) : evalComparisons.length === 0 ? (
+                    <EmptyChart message="No evaluation comparisons available." />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <ScatterChart margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border-strong))" />
+                        <XAxis
+                          dataKey="actual"
+                          tick={{ fill: "hsl(var(--foreground-dim))", fontSize: 9, fontWeight: 600 }}
+                          tickLine={false}
+                          axisLine={false}
+                          type="number"
+                        />
+                        <YAxis
+                          dataKey="predicted"
+                          tick={{ fill: "hsl(var(--foreground-dim))", fontSize: 9, fontWeight: 600 }}
+                          tickLine={false}
+                          axisLine={false}
+                          type="number"
+                        />
+                        <Tooltip
+                          cursor={{ stroke: "hsl(var(--border-strong))", strokeWidth: 1 }}
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border-strong))",
+                            borderRadius: "6px",
+                            fontSize: "10px",
+                            color: "hsl(var(--foreground-active))",
+                          }}
+                          formatter={(value: number, name: string) => [
+                            value?.toFixed(4) ?? "—",
+                            name === "predicted" ? "Predicted" : "Actual",
+                          ]}
+                        />
+                        <ReferenceLine
+                          segment={[
+                            { x: Math.min(...evalComparisons.map((c) => c.actual)), y: Math.min(...evalComparisons.map((c) => c.actual)) },
+                            { x: Math.max(...evalComparisons.map((c) => c.actual)), y: Math.max(...evalComparisons.map((c) => c.actual)) },
+                          ]}
+                          stroke="hsl(var(--primary))"
+                          strokeDasharray="3 3"
+                        />
+                        <Scatter data={evalComparisons} fill="hsl(var(--warning))" />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  )}
+                </ChartCard>
+
+                <ChartCard title="Residual Distribution">
+                  {evaluationLoading ? (
+                    <EmptyChart message="Loading evaluation data..." />
+                  ) : evaluationError ? (
+                    <EmptyChart message={evaluationError} />
+                  ) : residualBins.length === 0 ? (
+                    <EmptyChart message="No residual data available." />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={residualBins} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border-strong))" vertical={false} />
+                        <XAxis dataKey="bin" hide />
+                        <YAxis
+                          stroke="hsl(var(--foreground-subtle))"
+                          tick={{ fill: "hsl(var(--foreground-dim))", fontSize: 9, fontWeight: 600 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border-strong))",
+                            borderRadius: "6px",
+                            fontSize: "10px",
+                            color: "hsl(var(--foreground-active))",
+                          }}
+                          labelFormatter={(_label, payload) => {
+                            const entry = Array.isArray(payload)
+                              ? payload[0]?.payload
+                              : undefined;
+                            return entry?.label || "Residuals";
+                          }}
+                          formatter={(value: number) => [value ?? 0, "Count"]}
+                        />
+                        <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </ChartCard>
               </div>
             </>
           )}

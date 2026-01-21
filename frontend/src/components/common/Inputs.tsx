@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React from "react";
 import { Info } from "lucide-react";
 import * as Accordion from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
+import { Tooltip } from "./Tooltip";
 
 export function InspectorSection({
   value,
@@ -13,13 +14,16 @@ export function InspectorSection({
   children: React.ReactNode;
 }) {
   return (
-    <Accordion.Item value={value} className="border-b border-[#1e1e20]">
+    <Accordion.Item
+      value={value}
+      className="border-b border-[hsl(var(--border))]"
+    >
       <Accordion.Header className="flex">
-        <Accordion.Trigger className="flex flex-1 items-center justify-between py-3 text-[11px] font-bold text-[hsl(var(--foreground-active))] hover:bg-[#1e1e20]/30 px-4 transition-colors group outline-none uppercase tracking-widest">
+        <Accordion.Trigger className="flex flex-1 items-center justify-between py-3 text-[11px] font-bold text-[hsl(var(--foreground-active))] hover:bg-[hsl(var(--panel-lighter))/0.3] px-4 transition-colors group outline-none uppercase tracking-widest">
           {title}
           <ChevronDown
             size={14}
-            className="text-[#3f3f46] group-data-[state=open]:rotate-180 transition-transform"
+            className="text-[hsl(var(--foreground-subtle))] group-data-[state=open]:rotate-180 transition-transform"
           />
         </Accordion.Trigger>
       </Accordion.Header>
@@ -50,7 +54,6 @@ export function ControlInput({
   rangeScale?: "linear" | "log";
 }) {
   const numValue = parseFloat(value);
-  const [showHint, setShowHint] = useState(false);
   const isLogScale =
     rangeScale === "log" &&
     min !== undefined &&
@@ -78,17 +81,20 @@ export function ControlInput({
   };
 
   return (
-    <div className="space-y-3 py-3 border-b border-[#1e1e20]/50 last:border-0 group relative">
+    <div className="space-y-3 py-3 border-b border-[hsl(var(--border))/0.5] last:border-0 group relative">
       <div className="flex items-center justify-between">
         <label className="text-[11px] font-medium text-[hsl(var(--foreground))] tracking-tight flex items-center gap-2">
           {label}
           {tooltip && (
-            <button
-              onClick={() => setShowHint(!showHint)}
-              className={`transition-colors ${showHint ? "text-[#3b82f6]" : "text-[#3f3f46] hover:text-[#71717a]"}`}
-            >
-              <Info size={12} />
-            </button>
+            <Tooltip content={tooltip} side="top" align="start" sideOffset={6}>
+              <button
+                type="button"
+                className="text-[hsl(var(--foreground-subtle))] transition-colors hover:text-[hsl(var(--foreground-muted))] focus-visible:text-[hsl(var(--primary))]"
+                aria-label={`${label} info`}
+              >
+                <Info size={12} />
+              </button>
+            </Tooltip>
           )}
         </label>
         <input
@@ -96,7 +102,7 @@ export function ControlInput({
           value={value}
           data-testid={`input-${label.toLowerCase().replace(/\s+/g, "-")}`}
           onChange={(e) => onChange?.(e.target.value)}
-          className="bg-[#1e1e20] border border-[#2e2e30] rounded px-2 py-1 text-right text-[11px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none focus:border-[#3b82f6]/50 w-20 transition-colors"
+          className="bg-[hsl(var(--input))] border border-[hsl(var(--border-strong))] rounded px-2 py-1 text-right text-[11px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none focus:border-[hsl(var(--primary)/0.5)] w-20 transition-colors"
         />
       </div>
       {min !== undefined && max !== undefined && (
@@ -137,19 +143,8 @@ export function ControlInput({
             const mappedValue = toLogValue(t);
             onChange?.(formatValue(mappedValue));
           }}
-          className="w-full h-[2px] bg-[#2e2e30] rounded-full appearance-none accent-[#3b82f6] cursor-pointer hover:accent-[#60a5fa] transition-all"
+          className="w-full h-[2px] bg-[hsl(var(--border-strong))] rounded-full appearance-none accent-[hsl(var(--primary))] cursor-pointer hover:accent-[hsl(var(--primary-soft))] transition-all"
         />
-      )}
-      {showHint && tooltip && (
-        <>
-          <div className="mt-2 text-[10px] leading-relaxed text-[#71717a] bg-[#1e1e20]/50 p-2 rounded border border-[#2e2e30] animate-in fade-in slide-in-from-top-1">
-            {tooltip}
-          </div>
-          <div
-            className="fixed inset-0 z-[90]"
-            onClick={() => setShowHint(false)}
-          />
-        </>
       )}
     </div>
   );
@@ -176,23 +171,24 @@ export function RangeControl({
     typeof value === "string" ? value.split("→").map((p) => p.trim()) : [];
   const vMin = parseFloat(parts[0]) || min;
   const vMax = parseFloat(parts[1]) || max;
-  const [showHint, setShowHint] = useState(false);
-
   const updateMin = (newMin: string) => onChange(`${newMin} → ${vMax}`);
   const updateMax = (newMax: string) => onChange(`${vMin} → ${newMax}`);
 
   return (
-    <div className="space-y-4 py-4 border-b border-[#1e1e20]/50 last:border-0 group relative">
+    <div className="space-y-4 py-4 border-b border-[hsl(var(--border))/0.5] last:border-0 group relative">
       <div className="flex items-center justify-between">
         <label className="text-[11px] font-medium text-[hsl(var(--foreground))] tracking-tight flex items-center gap-2">
           {label}
           {tooltip && (
-            <button
-              onClick={() => setShowHint(!showHint)}
-              className={`transition-colors ${showHint ? "text-[#3b82f6]" : "text-[#3f3f46] hover:text-[#71717a]"}`}
-            >
-              <Info size={12} />
-            </button>
+            <Tooltip content={tooltip} side="top" align="start" sideOffset={6}>
+              <button
+                type="button"
+                className="text-[hsl(var(--foreground-subtle))] transition-colors hover:text-[hsl(var(--foreground-muted))] focus-visible:text-[hsl(var(--primary))]"
+                aria-label={`${label} info`}
+              >
+                <Info size={12} />
+              </button>
+            </Tooltip>
           )}
         </label>
         <div className="flex items-center gap-1">
@@ -201,21 +197,25 @@ export function RangeControl({
             value={vMin}
             onChange={(e) => updateMin(e.target.value)}
             data-testid={`range-min-${label.toLowerCase().replace(/\s+/g, "-")}`}
-            className="bg-[#1e1e20] border border-[#2e2e30] rounded px-2 py-1 text-center text-[10px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none w-14"
+            className="bg-[hsl(var(--input))] border border-[hsl(var(--border-strong))] rounded px-2 py-1 text-center text-[10px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none w-14"
           />
-          <span className="text-[#3f3f46] text-[10px]">→</span>
+          <span className="text-[hsl(var(--foreground-subtle))] text-[10px]">
+            →
+          </span>
           <input
             type="text"
             value={vMax}
             onChange={(e) => updateMax(e.target.value)}
             data-testid={`range-max-${label.toLowerCase().replace(/\s+/g, "-")}`}
-            className="bg-[#1e1e20] border border-[#2e2e30] rounded px-2 py-1 text-center text-[10px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none w-14"
+            className="bg-[hsl(var(--input))] border border-[hsl(var(--border-strong))] rounded px-2 py-1 text-center text-[10px] text-[hsl(var(--foreground-active))] font-mono focus:outline-none w-14"
           />
         </div>
       </div>
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          <span className="text-[9px] text-[#52525b] w-6 font-bold">MIN</span>
+          <span className="text-[9px] text-[hsl(var(--foreground-dim))] w-6 font-bold">
+            MIN
+          </span>
           <input
             type="range"
             min={min}
@@ -223,11 +223,13 @@ export function RangeControl({
             step={step}
             value={vMin}
             onChange={(e) => updateMin(e.target.value)}
-            className="flex-1 h-[2px] bg-[#2e2e30] rounded-full appearance-none accent-[#3b82f6] cursor-pointer"
+            className="flex-1 h-[2px] bg-[hsl(var(--border-strong))] rounded-full appearance-none accent-[hsl(var(--primary))] cursor-pointer"
           />
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[9px] text-[#52525b] w-6 font-bold">MAX</span>
+          <span className="text-[9px] text-[hsl(var(--foreground-dim))] w-6 font-bold">
+            MAX
+          </span>
           <input
             type="range"
             min={min}
@@ -235,21 +237,10 @@ export function RangeControl({
             step={step}
             value={vMax}
             onChange={(e) => updateMax(e.target.value)}
-            className="flex-1 h-[2px] bg-[#2e2e30] rounded-full appearance-none accent-[#3b82f6] cursor-pointer"
+            className="flex-1 h-[2px] bg-[hsl(var(--border-strong))] rounded-full appearance-none accent-[hsl(var(--primary))] cursor-pointer"
           />
         </div>
       </div>
-      {showHint && tooltip && (
-        <>
-          <div className="mt-2 text-[10px] leading-relaxed text-[#71717a] bg-[#1e1e20]/50 p-2 rounded border border-[#2e2e30] animate-in fade-in slide-in-from-top-1">
-            {tooltip}
-          </div>
-          <div
-            className="fixed inset-0 z-[90]"
-            onClick={() => setShowHint(false)}
-          />
-        </>
-      )}
     </div>
   );
 }

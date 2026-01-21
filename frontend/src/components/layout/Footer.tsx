@@ -25,13 +25,13 @@ export function Footer({
         <div className="flex bg-zinc-900 rounded overflow-hidden border border-zinc-800">
           <button
             onClick={() => setIsAdvancedMode(false)}
-            className={`px-3 py-0.5 font-bold transition-colors ${!isAdvancedMode ? "bg-blue-500 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+            className={`px-3 py-0.5 font-bold transition-colors ${!isAdvancedMode ? "bg-[hsl(var(--primary))] text-[hsl(var(--foreground-active))]" : "text-zinc-500 hover:text-zinc-300"}`}
           >
             BASIC
           </button>
           <button
             onClick={() => setIsAdvancedMode(true)}
-            className={`px-3 py-0.5 font-bold transition-colors ${isAdvancedMode ? "bg-blue-500 text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+            className={`px-3 py-0.5 font-bold transition-colors ${isAdvancedMode ? "bg-[hsl(var(--primary))] text-[hsl(var(--foreground-active))]" : "text-zinc-500 hover:text-zinc-300"}`}
           >
             ADVANCED
           </button>
@@ -42,8 +42,8 @@ export function Footer({
             className={
               isRunning
                 ? isAborting
-                  ? "text-red-400"
-                  : "text-blue-500 animate-pulse"
+                  ? "text-[hsl(var(--danger))]"
+                  : "text-[hsl(var(--primary))] animate-pulse"
                 : "text-zinc-500"
             }
           >
@@ -70,12 +70,12 @@ export function Footer({
           <ResourceBadge
             label="GPU"
             value={`${hardwareStats?.gpu_use_percent || 0}%`}
-            color="text-blue-500"
+            color="text-[hsl(var(--primary))]"
           />
           <ResourceBadge
             label="VRAM"
             value={`${hardwareStats?.vram_used_gb || 0} / ${hardwareStats?.vram_total_gb || 0} GB`}
-            color="text-blue-500"
+            color="text-[hsl(var(--primary))]"
           />
         </div>
         <div className="h-3 w-px bg-zinc-800"></div>

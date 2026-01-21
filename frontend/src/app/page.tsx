@@ -104,18 +104,31 @@ export default function Dashboard() {
   const fetchRetryRef = useRef<number | null>(null);
   const [wsStatus, setWsStatus] = useState<number>(3);
 
+  const refreshRuns = React.useCallback(async () => {
+    try {
+      const headers = { "X-API-Key": API_KEY };
+      const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+      if (runsRes.ok) {
+        const runsJson = await runsRes.json();
+        setRuns(runsJson);
+      }
+    } catch (e) {
+      console.debug("Runs refresh error:", e);
+    }
+  }, [setRuns]);
+
   const getConnectionStatus = () => {
     switch (wsStatus) {
       case 0:
-        return { label: "CONNECTING", color: "bg-[#f59e0b]" };
+        return { label: "CONNECTING", color: "bg-[hsl(var(--warning))]" };
       case 1:
-        return { label: "CONNECTED", color: "bg-[#22c55e]" };
+        return { label: "CONNECTED", color: "bg-[hsl(var(--success))]" };
       case 2:
-        return { label: "CLOSING", color: "bg-[#f59e0b]" };
+        return { label: "CLOSING", color: "bg-[hsl(var(--warning))]" };
       case 3:
-        return { label: "CLOSED", color: "bg-[#ef4444]" };
+        return { label: "CLOSED", color: "bg-[hsl(var(--danger))]" };
       default:
-        return { label: "DISCONNECTED", color: "bg-[#ef4444]" };
+        return { label: "DISCONNECTED", color: "bg-[hsl(var(--danger))]" };
     }
   };
 
@@ -331,6 +344,12 @@ export default function Dashboard() {
               // string (e.g. "queued", "running"). Handle both formats gracefully.
               const statusStr =
                 typeof msg.data?.status === "string" ? String(msg.data.status) : undefined;
+              const isTerminalStatus =
+                statusStr === "completed" || statusStr === "failed" || statusStr === "aborted";
+              const isStopped = msg.data?.is_running === false;
+              const hasResult = Boolean(msg.data?.result);
+              const progressVal =
+                typeof msg.data?.progress === "number" ? msg.data.progress : null;
               if (statusStr) {
                 if (statusStr === "running") {
                   setIsRunning(true);
@@ -358,6 +377,10 @@ export default function Dashboard() {
               // Accept both snake_case and camelCase trial keys
               setTrialInfo(msg.data.current_trial ?? msg.data.currentTrial ?? 0, msg.data.total_trials ?? msg.data.totalTrials ?? 0);
               if (msg.data.result) setResult(msg.data.result);
+
+              if (isTerminalStatus || (isStopped && (hasResult || progressVal === 100))) {
+                refreshRuns();
+              }
             } else if (msg.type === "log") {
               addLog(msg.data);
             } else if (msg.type === "metrics") {
@@ -406,6 +429,7 @@ export default function Dashboard() {
     addMetric,
     setIsAborting,
     setIsStarting,
+    refreshRuns,
   ]);
 
   // Polling fallback: when WebSocket is disconnected or while starting, poll runs
@@ -823,7 +847,7 @@ export default function Dashboard() {
   const connStatus = getConnectionStatus();
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-white selection:bg-blue-500/20 font-sans overflow-hidden">
+    <div className="flex flex-col h-screen bg-zinc-950 text-white selection:bg-[hsl(var(--primary)/0.2)] font-sans overflow-hidden">
       <Header
         isRunning={isRunning}
         isStarting={isStarting}
@@ -862,7 +886,7 @@ export default function Dashboard() {
 
             {activeWorkspace === "Train" && (
               <>
-                <PanelResizeHandle className="w-px bg-zinc-800 hover:bg-blue-500/50 transition-colors" />
+                <PanelResizeHandle className="w-px bg-zinc-800 hover:bg-[hsl(var(--primary)/0.5)] transition-colors" />
                 <Panel defaultSize={25} minSize={20}>
                   <ErrorBoundary>
                     <Inspector setError={setError} />
@@ -882,18 +906,18 @@ export default function Dashboard() {
 
       {error && (
         <div className="fixed bottom-12 right-6 z-[100] max-w-md animate-in fade-in slide-in-from-right-4 pointer-events-none">
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 shadow-2xl backdrop-blur-md">
-            <AlertCircle className="text-red-500 shrink-0" size={18} />
+          <div className="bg-[hsl(var(--danger)/0.1)] border border-[hsl(var(--danger)/0.2)] rounded-lg p-4 flex gap-3 shadow-2xl backdrop-blur-md">
+            <AlertCircle className="text-[hsl(var(--danger))] shrink-0" size={18} />
             <div className="flex-1">
-              <h4 className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-1">
+              <h4 className="text-[11px] font-bold text-[hsl(var(--danger))] uppercase tracking-widest mb-1">
                 System Error
               </h4>
-              <p className="text-[11px] text-red-200/80 font-mono leading-relaxed">
+              <p className="text-[11px] text-[hsl(var(--danger)/0.8)] font-mono leading-relaxed">
                 {error}
               </p>
               <button
                 onClick={() => setError(null)}
-                className="mt-3 text-[10px] font-bold text-red-500 hover:text-red-400 uppercase pointer-events-auto"
+                className="mt-3 text-[10px] font-bold text-[hsl(var(--danger))] hover:text-[hsl(var(--danger)/0.85)] uppercase pointer-events-auto"
                 data-testid="btn-dismiss-error"
               >
                 Dismiss
@@ -908,7 +932,7 @@ export default function Dashboard() {
           <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]" />
           <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-2xl z-[101]">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+              <div className="w-8 h-8 rounded bg-[hsl(var(--primary)/0.1)] flex items-center justify-center text-[hsl(var(--primary))]">
                 <Settings size={18} />
               </div>
               <Dialog.Title className="text-sm font-bold uppercase tracking-widest">

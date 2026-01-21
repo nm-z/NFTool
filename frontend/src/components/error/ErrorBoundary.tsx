@@ -30,29 +30,29 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="h-screen w-screen bg-[hsl(var(--background))] flex items-center justify-center p-6 text-[hsl(var(--foreground))]">
-          <div className="max-w-md w-full bg-[hsl(var(--panel))] border border-red-500/30 rounded-2xl p-8 shadow-2xl shadow-red-500/5 space-y-6">
+          <div className="max-w-md w-full bg-[hsl(var(--panel))] border border-[hsl(var(--danger)/0.3)] rounded-2xl p-8 shadow-[0_20px_25px_-5px_hsl(var(--danger)/0.12),0_8px_10px_-6px_hsl(var(--danger)/0.08)] space-y-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-400">
+              <div className="w-12 h-12 rounded-full bg-[hsl(var(--danger)/0.1)] flex items-center justify-center text-[hsl(var(--danger))]">
                 <AlertCircle size={28} />
               </div>
               <div>
                 <h1 className="text-lg font-bold uppercase tracking-tight">
                   System Exception
                 </h1>
-                <p className="text-[11px] text-[#52525b] font-mono">
+                <p className="text-[11px] text-[hsl(var(--foreground-dim))] font-mono">
                   UI_CRASH_PROTECTION_ACTIVE
                 </p>
               </div>
             </div>
 
-            <div className="bg-[#000000] border border-[hsl(var(--border))] rounded-lg p-4 font-mono text-[10px] text-red-400/80 overflow-auto max-h-32 custom-scrollbar">
+            <div className="bg-[hsl(var(--panel))] border border-[hsl(var(--border))] rounded-lg p-4 font-mono text-[10px] text-[hsl(var(--danger)/0.8)] overflow-auto max-h-32 custom-scrollbar">
               {this.state.error?.toString()}
             </div>
 
             <div className="flex flex-col gap-3 pt-2">
               <button
                 onClick={() => window.location.reload()}
-                className="w-full py-2.5 bg-red-500 text-white text-[11px] font-bold rounded-lg hover:bg-red-600 transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[hsl(var(--danger))] text-[hsl(var(--foreground-active))] text-[11px] font-bold rounded-lg hover:bg-[hsl(var(--danger-strong))] transition-all flex items-center justify-center gap-2"
               >
                 <RefreshCcw size={14} />
                 RELOAD APPLICATION
@@ -62,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   this.setState({ hasError: false, error: null });
                   window.location.href = "/";
                 }}
-                className="w-full py-2.5 bg-[hsl(var(--panel-lighter))] text-[#52525b] text-[11px] font-bold rounded-lg hover:text-[hsl(var(--foreground-active))] transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground-dim))] text-[11px] font-bold rounded-lg hover:text-[hsl(var(--foreground-active))] transition-all flex items-center justify-center gap-2"
               >
                 <Home size={14} />
                 RETURN TO DASHBOARD

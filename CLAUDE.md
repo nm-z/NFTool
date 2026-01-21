@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, orchestrated via Docker Compose with ROCm GPU acceleration.
+Development is container-first; run tests, linting, and build steps inside the Docker services to match runtime dependencies.
 
 ## Development Commands
 
@@ -28,22 +29,22 @@ The backend runs on `http://localhost:8001` and frontend on `http://localhost:30
 ### Testing
 ```bash
 # Run all backend tests
-python -m pytest
+docker compose exec backend python -m pytest
 
 # Run specific test file
-python -m pytest tests/test_api_schemathesis.py
+docker compose exec backend python -m pytest tests/test_api_schemathesis.py
 
 # Run with verbose output
-python -m pytest -v
+docker compose exec backend python -m pytest -v
 ```
 
 ### Linting
 ```bash
 # Run pylint on backend code
-python -m pylint src/
+docker compose exec backend python -m pylint src/
 
 # Check specific module
-python -m pylint src/training/
+docker compose exec backend python -m pylint src/training/
 ```
 
 ## Architecture

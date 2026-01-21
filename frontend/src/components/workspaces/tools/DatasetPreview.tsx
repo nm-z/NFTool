@@ -85,19 +85,19 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 bg-[hsl(var(--panel))] p-3 rounded-lg border border-[hsl(var(--border))]">
-        <FolderOpen size={16} className="text-[#3b82f6]" />
+        <FolderOpen size={16} className="text-[hsl(var(--primary))]" />
         <input
           type="text"
           value={filePath}
           onChange={(e) => setFilePath(e.target.value)}
           placeholder="Dataset path..."
-          className="flex-1 bg-transparent border-none outline-none text-[11px] text-[hsl(var(--foreground-active))] placeholder-[#3f3f46]"
+          className="flex-1 bg-transparent border-none outline-none text-[11px] text-[hsl(var(--foreground-active))] placeholder-[hsl(var(--foreground-subtle))]"
         />
       <button
           onClick={() => loadPreview()}
           data-testid="btn-preview-dataset"
           disabled={loading}
-          className="px-4 py-1.5 bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/30 hover:bg-[#3b82f6] hover:text-[hsl(var(--foreground-active))] text-[11px] font-bold rounded transition-all disabled:opacity-50"
+          className="px-4 py-1.5 bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] border border-[hsl(var(--primary)/0.3)] hover:bg-[hsl(var(--primary))] hover:text-[hsl(var(--foreground-active))] text-[11px] font-bold rounded transition-all disabled:opacity-50"
         >
           {loading ? "Loading..." : "Preview"}
         </button>
@@ -133,13 +133,13 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
       )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-3 text-red-400 text-[11px] font-medium">
+        <div className="bg-[hsl(var(--danger)/0.1)] border border-[hsl(var(--danger)/0.2)] rounded-lg p-3 flex items-center gap-3 text-[hsl(var(--danger))] text-[11px] font-medium">
           <AlertCircle size={14} />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => loadPreview(filePath)}
             disabled={loading}
-            className="px-3 py-1 rounded text-[11px] font-medium bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50"
+            className="px-3 py-1 rounded text-[11px] font-medium bg-[hsl(var(--danger)/0.1)] border border-[hsl(var(--danger)/0.2)] hover:bg-[hsl(var(--danger)/0.2)] disabled:opacity-50"
           >
             Retry
           </button>
@@ -153,7 +153,7 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
               className="w-full text-left border-collapse"
               suppressHydrationWarning
             >
-              <thead className="bg-[hsl(var(--panel))] text-[10px] text-[#52525b] uppercase font-bold">
+              <thead className="bg-[hsl(var(--panel))] text-[10px] text-[hsl(var(--foreground-dim))] uppercase font-bold">
                 <tr>
                   {previewData.headers.map((h: string, i: number) => (
                     <th

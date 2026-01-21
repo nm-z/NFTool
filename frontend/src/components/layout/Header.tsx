@@ -167,7 +167,7 @@ export function Header({
       )}
       {/* Left: App Branding */}
       <div className="flex items-center gap-3 w-1/4">
-        <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center text-white">
+        <div className="w-6 h-6 bg-[hsl(var(--primary))] rounded flex items-center justify-center text-[hsl(var(--foreground-active))]">
           <Activity size={14} strokeWidth={3} />
         </div>
         <span className="text-[12px] font-bold text-white uppercase tracking-tight">
@@ -183,8 +183,8 @@ export function Header({
             className={
               displayIsRunning || displayIsStarting
                 ? isAborting
-                  ? "text-red-400 animate-spin"
-                  : "text-blue-500 animate-pulse"
+                  ? "text-[hsl(var(--danger))] animate-spin"
+                  : "text-[hsl(var(--primary))] animate-pulse"
                 : "text-zinc-500"
             }
           />
@@ -239,7 +239,7 @@ export function Header({
                 handleAbortTraining();
               }}
               disabled={isAborting}
-              className={`flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold transition-all ${isAborting ? "text-red-400/50 bg-red-500/5 cursor-not-allowed" : "text-red-400 bg-red-500/10 hover:bg-red-500/20"}`}
+              className={`flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold transition-all ${isAborting ? "text-[hsl(var(--danger)/0.5)] bg-[hsl(var(--danger)/0.05)] cursor-not-allowed" : "text-[hsl(var(--danger))] bg-[hsl(var(--danger)/0.1)] hover:bg-[hsl(var(--danger)/0.2)]"}`}
             >
               {isAborting ? (
                 <RefreshCw size={12} className="animate-spin" />
@@ -253,7 +253,7 @@ export function Header({
               type="button"
               data-testid="btn-reset"
               onClick={handleResetTraining}
-              className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+              className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-[hsl(var(--primary-soft))] bg-[hsl(var(--primary)/0.1)] hover:bg-[hsl(var(--primary)/0.2)] transition-all"
             >
               <RefreshCw size={12} />
               Reset
@@ -266,7 +266,7 @@ export function Header({
                 console.debug("Header: Run clicked", { isRunning, isStarting });
                 handleStartTraining();
               }}
-              className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-white bg-blue-500 hover:bg-blue-600 transition-all"
+              className="flex items-center gap-2 px-3 py-1 rounded text-[11px] font-bold text-[hsl(var(--foreground-active))] bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-strong))] transition-all"
             >
               <Play size={12} fill="currentColor" />
               Run

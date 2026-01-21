@@ -87,10 +87,15 @@ async def lifespan(_app: FastAPI):
     )
     del _hardware_monitor_task  # Explicitly delete to mark as "used" for linters
 
-    # State Recovery: Mark any stuck 'running' jobs as 'failed'
+    # State Recovery: Mark any stuck 'running'/'queued' jobs as 'failed'
     with SESSION_LOCAL() as db:
-        stuck_runs = db.query(Run).filter(Run.status == "running").all()
+        stuck_runs = (
+            db.query(Run)
+            .filter(Run.status.in_(["running", "queued"]))
+            .all()
+        )
         for run in stuck_runs:
+            prev_status = getattr(run, "status", "unknown")
             # Cast to Any to satisfy static checkers before assigning runtime value.
             typing_cast(Any, run).status = "failed"
             run.logs.append(
@@ -100,8 +105,9 @@ async def lifespan(_app: FastAPI):
                 }
             )
             logger.warning(
-                "Run %s was stuck in 'running' status, marked as 'failed'.",
+                "Run %s was stuck in '%s' status, marked as 'failed'.",
                 run.run_id,
+                prev_status,
             )
         db.commit()
     _job_queue_task = asyncio.create_task(job_queue.process_queue())

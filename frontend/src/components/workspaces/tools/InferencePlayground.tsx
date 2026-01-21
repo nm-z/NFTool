@@ -119,32 +119,34 @@ export function InferencePlayground({
 
   return (
     <div className="space-y-6">
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-6">
+      <div className="bg-[hsl(var(--panel-lighter)/0.5)] border border-[hsl(var(--border))] rounded-xl p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center text-blue-500">
+            <div className="w-8 h-8 rounded bg-[hsl(var(--primary)/0.1)] flex items-center justify-center text-[hsl(var(--primary))]">
               <FastForward size={18} />
             </div>
             <div>
-              <h3 className="text-[12px] font-bold text-white">Test Set Evaluator</h3>
-              <p className="text-[10px] text-zinc-500">
+              <h3 className="text-[12px] font-bold text-[hsl(var(--foreground-active))]">
+                Test Set Evaluator
+              </h3>
+              <p className="text-[10px] text-[hsl(var(--foreground-muted))]">
                 Evaluate saved runs against their hold-out test split
               </p>
             </div>
           </div>
           {resolvedRunId ? (
-            <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 border border-green-500/30 rounded text-[10px] font-bold text-green-400 uppercase">
+            <div className="flex items-center gap-2 px-3 py-1 bg-[hsl(var(--success)/0.1)] border border-[hsl(var(--success)/0.3)] rounded text-[10px] font-bold text-[hsl(var(--success))] uppercase">
               <Check size={12} /> Ready
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/30 rounded text-[10px] font-bold text-red-400 uppercase">
+            <div className="flex items-center gap-2 px-3 py-1 bg-[hsl(var(--danger)/0.1)] border border-[hsl(var(--danger)/0.3)] rounded text-[10px] font-bold text-[hsl(var(--danger))] uppercase">
               <AlertCircle size={12} /> Run Missing
             </div>
           )}
         </div>
 
-        <div className="space-y-2 border-y border-zinc-800/50 py-4">
-          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+        <div className="space-y-2 border-y border-[hsl(var(--border)/0.5)] py-4">
+          <label className="text-[10px] font-bold text-[hsl(var(--foreground-muted))] uppercase tracking-widest flex items-center gap-2">
             <HardDrive size={12} /> Saved Models (Completed Runs)
           </label>
           <div className="flex gap-2 items-center">
@@ -156,7 +158,7 @@ export function InferencePlayground({
                 setEvaluation(null);
                 if (next) setLoadedModelPath(next);
               }}
-              className="flex-1 bg-black border border-zinc-800 rounded px-3 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500"
+              className="flex-1 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded px-3 py-1.5 text-[11px] text-[hsl(var(--foreground-active))] focus:outline-none focus:border-[hsl(var(--primary))]"
               data-testid="select-completed-model"
             >
               <option value="">
@@ -173,7 +175,7 @@ export function InferencePlayground({
 
         {isAdvancedMode && (
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+            <label className="text-[10px] font-bold text-[hsl(var(--foreground-muted))] uppercase tracking-widest flex items-center gap-2">
               <HardDrive size={12} /> Upload .pt (Advanced)
             </label>
             <div className="flex items-center gap-3">
@@ -181,19 +183,21 @@ export function InferencePlayground({
                 type="file"
                 accept=".pt"
                 onChange={(e) => handleUploadWeights(e.target.files?.[0] || null)}
-                className="text-[11px] text-zinc-400"
+                className="text-[11px] text-[hsl(var(--foreground))]"
               />
               {uploading && (
-                <span className="text-[10px] text-zinc-500">Uploading...</span>
+                <span className="text-[10px] text-[hsl(var(--foreground-muted))]">
+                  Uploading...
+                </span>
               )}
               {uploadedModelPath && (
-                <span className="text-[10px] text-blue-400 font-mono">
+                <span className="text-[10px] text-[hsl(var(--primary-soft))] font-mono">
                   {uploadedModelPath}
                 </span>
               )}
             </div>
             {uploadInfo && (
-              <div className="text-[10px] text-zinc-500">
+              <div className="text-[10px] text-[hsl(var(--foreground-muted))]">
                 Uploaded model info: R² {uploadInfo.r2 || "N/A"} • MAE{" "}
                 {uploadInfo.mae || "N/A"} • {uploadInfo.model || "Unknown"}
               </div>
@@ -206,14 +210,14 @@ export function InferencePlayground({
             onClick={runEvaluation}
             data-testid="btn-execute-inference"
             disabled={loading || !resolvedRunId}
-            className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-[11px] font-bold rounded-lg transition-all disabled:opacity-50 disabled:grayscale shadow-lg shadow-blue-500/10"
+            className="w-full py-2.5 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-strong))] text-[hsl(var(--foreground-active))] text-[11px] font-bold rounded-lg transition-all disabled:opacity-50 disabled:grayscale shadow-[0_10px_15px_-3px_hsl(var(--primary)/0.12),0_4px_6px_-4px_hsl(var(--primary)/0.12)]"
           >
             {loading ? "COMPUTING..." : "EVALUATE TEST SET"}
           </button>
         </div>
 
         {error && (
-          <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-3">
+          <div className="text-[11px] text-[hsl(var(--danger))] bg-[hsl(var(--danger)/0.1)] border border-[hsl(var(--danger)/0.2)] rounded-lg px-4 py-3 flex items-center gap-3">
             <AlertCircle size={14} />
             {error}
           </div>
@@ -223,55 +227,57 @@ export function InferencePlayground({
           <div className="space-y-4">
             <div className="bg-[hsl(var(--panel-lighter))] border border-[hsl(var(--border-muted))] rounded-lg p-5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-widest">
+                <span className="text-[10px] font-bold text-[hsl(var(--foreground-dim))] uppercase tracking-widest">
                   Accuracy Summary
                 </span>
-                <span className="text-[10px] text-[#3b82f6] font-mono">
+                <span className="text-[10px] text-[hsl(var(--primary))] font-mono">
                   {evaluation.count} samples
                 </span>
               </div>
-              <div className="text-[28px] font-mono text-[#3b82f6] tracking-tighter tabular-nums leading-none">
+              <div className="text-[28px] font-mono text-[hsl(var(--primary))] tracking-tighter tabular-nums leading-none">
                 {evaluation.accuracy_percent.toFixed(2)}%
               </div>
-              <div className="text-[10px] text-zinc-500 mt-2 flex justify-between">
+              <div className="text-[10px] text-[hsl(var(--foreground-muted))] mt-2 flex justify-between">
                 <span>MAPE: {evaluation.mape_percent.toFixed(2)}%</span>
                 <span>R²: {evaluation.r2_score.toFixed(4)}</span>
               </div>
             </div>
-            <div className="border border-zinc-800 rounded-lg overflow-hidden">
-              <div className="bg-zinc-900/60 px-4 py-2 text-[10px] uppercase font-bold text-zinc-500">
+            <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden">
+              <div className="bg-[hsl(var(--panel-lighter)/0.6)] px-4 py-2 text-[10px] uppercase font-bold text-[hsl(var(--foreground-muted))]">
                 Sample Predictions
               </div>
               <div className="max-h-64 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-left text-[11px] font-mono">
-                  <thead className="bg-zinc-900 text-zinc-500 font-bold">
+                  <thead className="bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground-muted))] font-bold">
                     <tr>
-                      <th className="px-4 py-2 border-b border-zinc-800">#</th>
-                      <th className="px-4 py-2 border-b border-zinc-800">
+                      <th className="px-4 py-2 border-b border-[hsl(var(--border))]">#</th>
+                      <th className="px-4 py-2 border-b border-[hsl(var(--border))]">
                         Actual
                       </th>
-                      <th className="px-4 py-2 border-b border-zinc-800">
+                      <th className="px-4 py-2 border-b border-[hsl(var(--border))]">
                         Predicted
                       </th>
-                      <th className="px-4 py-2 border-b border-zinc-800">
+                      <th className="px-4 py-2 border-b border-[hsl(var(--border))]">
                         Error %
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="text-white">
+                  <tbody className="text-[hsl(var(--foreground-active))]">
                     {evaluation.comparisons.map((row) => (
                       <tr
                         key={row.index}
-                        className="border-b border-zinc-800/50"
+                        className="border-b border-[hsl(var(--border)/0.5)]"
                       >
-                        <td className="px-4 py-2 text-zinc-500">{row.index}</td>
+                        <td className="px-4 py-2 text-[hsl(var(--foreground-muted))]">
+                          {row.index}
+                        </td>
                         <td className="px-4 py-2">
                           {row.actual.toFixed(6)}
                         </td>
                         <td className="px-4 py-2">
                           {row.predicted.toFixed(6)}
                         </td>
-                        <td className="px-4 py-2 text-zinc-400">
+                        <td className="px-4 py-2 text-[hsl(var(--foreground))]">
                           {row.percent_error.toFixed(2)}%
                         </td>
                       </tr>

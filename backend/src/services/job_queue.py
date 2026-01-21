@@ -261,6 +261,37 @@ class JobQueue:
             t = asyncio.create_task(self.process_queue())
             self._tasks.append(t)
             return True
+        # If no active process, clear any queued jobs.
+        if self.queue:
+            canceled: list[str] = []
+            while self.queue:
+                job = self.queue.pop()
+                run_id = job.get("run_id")
+                if run_id:
+                    canceled.append(run_id)
+                    run = db.query(Run).filter(Run.run_id == run_id).first()
+                    if run:
+                        cast(Any, run).status = "aborted"
+                        db.commit()
+            connection_manager = importlib.import_module("src.manager").manager
+            telemetry_message_cls = importlib.import_module(
+                "src.schemas.websocket"
+            ).TelemetryMessage
+            await connection_manager.broadcast(
+                telemetry_message_cls(
+                    type="status",
+                    data={
+                        "is_running": False,
+                        "is_aborting": False,
+                        "progress": 0,
+                        "run_id": canceled[-1] if canceled else None,
+                        "queue_size": len(self.queue),
+                        "active_job_id": None,
+                    },
+                )
+            )
+            logger.info("Canceled queued jobs: %s", ",".join(canceled))
+            return True
         return False
 
     def get_status(self):

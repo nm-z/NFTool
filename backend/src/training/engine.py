@@ -288,6 +288,12 @@ class Objective:
                 "lr": lr,
                 "optimizer": optimizer,
             }
+            on_trial_start = self.params.get("on_trial_start")
+            if on_trial_start:
+                try:
+                    on_trial_start(trial.number, dict(trial.params))
+                except Exception:
+                    pass
             _, loss, history = train_model(
                 torch.tensor(self.x_train, dtype=torch.float32).to(self.device),
                 torch.tensor(self.y_train, dtype=torch.float32)
@@ -343,6 +349,12 @@ class Objective:
                 "lr": lr,
                 "optimizer": optimizer,
             }
+            on_trial_start = self.params.get("on_trial_start")
+            if on_trial_start:
+                try:
+                    on_trial_start(trial.number, dict(trial.params))
+                except Exception:
+                    pass
             _, loss, history = train_cnn_model(
                 self.x_train,
                 self.y_train,
@@ -361,6 +373,26 @@ class Objective:
         if history["r2"]:
             trial.set_user_attr("r2", history["r2"][-1])
             trial.set_user_attr("mae", history["mae"][-1])
+
+        if history.get("r2"):
+            try:
+                r2_vals = history["r2"]
+                best_idx = max(range(len(r2_vals)), key=lambda i: r2_vals[i])
+                best_epoch = int(best_idx)
+                best_val_r2 = float(r2_vals[best_idx])
+            except (ValueError, TypeError):
+                best_epoch = 0
+                best_val_r2 = 0.0
+        else:
+            best_epoch = 0
+            best_val_r2 = 0.0
+
+        on_trial_end = self.params.get("on_trial_end")
+        if on_trial_end:
+            try:
+                on_trial_end(trial.number, best_epoch, best_val_r2)
+            except Exception:
+                pass
 
         return loss
 

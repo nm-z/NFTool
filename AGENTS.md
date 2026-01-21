@@ -11,11 +11,11 @@
 - `docker compose up`: Run full stack (backend on `http://localhost:8001`, frontend on `http://localhost:3000`).
 - `docker compose restart backend`: Quick backend restart after Python-only changes.
 - `docker compose up -d --no-deps --build backend`: Rebuild backend image after dependency/Dockerfile edits.
-- `cd frontend && npm run dev`: Start the Next.js dev server.
-- `cd frontend && npm run build` / `npm run start`: Production build and serve.
-- `cd frontend && npm run lint`: ESLint check.
-- `cd backend && python -m pytest`: Run backend tests.
-- `cd backend && python -m pylint src/`: Lint backend code.
+- `docker compose exec frontend npm run lint`: ESLint check (inside container).
+- `docker compose exec frontend npm run build` / `npm run start`: Production build and serve (inside container).
+- `docker compose exec backend python -m pytest`: Run backend tests (inside container).
+- `docker compose exec backend python -m pylint src/`: Lint backend code (inside container).
+- Use `docker compose exec <service> ...` for dev tooling so it matches the container runtime.
 
 ## Coding Style & Naming Conventions
 - Python: 4-space indentation, `snake_case` modules/functions. Keep API types in `backend/src/schemas/`.
@@ -25,7 +25,7 @@
 ## Testing Guidelines
 - Backend: pytest with Schemathesis in `backend/tests/`; name files `test_*.py`.
 - Frontend: Playwright e2e tests in `frontend/tests/e2e/*.spec.ts`.
-- Playwright expects the frontend running and the backend reachable (the tests wait for a CONNECTED state).
+- Playwright expects the frontend running and the backend reachable (the tests wait for a CONNECTED state). Prefer running tests inside the containers so dependencies match runtime.
 
 ## Commit & Pull Request Guidelines
 - Recent history uses short, sentence-case, imperative messages (e.g., “Fix training completion…”). Avoid ticket prefixes unless required.
@@ -42,7 +42,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, orchestrated via Docker Compose with ROCm GPU acceleration.
+NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, orchestrated via Docker Compose with ROCm GPU acceleration. Development is container-first; run tests, linting, and build steps inside the Docker services to match runtime dependencies.
 
 ## Development Commands
 
@@ -66,22 +66,22 @@ The backend runs on `http://localhost:8001` and frontend on `http://localhost:30
 ### Testing
 ```bash
 # Run all backend tests
-python -m pytest
+docker compose exec backend python -m pytest
 
 # Run specific test file
-python -m pytest tests/test_api_schemathesis.py
+docker compose exec backend python -m pytest tests/test_api_schemathesis.py
 
 # Run with verbose output
-python -m pytest -v
+docker compose exec backend python -m pytest -v
 ```
 
 ### Linting
 ```bash
 # Run pylint on backend code
-python -m pylint src/
+docker compose exec backend python -m pylint src/
 
 # Check specific module
-python -m pylint src/training/
+docker compose exec backend python -m pylint src/training/
 ```
 
 ## Architecture

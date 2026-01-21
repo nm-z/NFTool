@@ -1,5 +1,6 @@
 import React from "react";
 import * as Tabs from "@radix-ui/react-tabs";
+import archy from "archy";
 import {
   LineChart as RechartsLineChart,
   Line,
@@ -15,6 +16,7 @@ import {
   History as HistoryIcon,
   Terminal,
   Trash2,
+  Copy,
 } from "lucide-react";
 import {
   Panel,
@@ -45,9 +47,13 @@ export function TrainWorkspace() {
     setProgress,
     setTrialInfo,
     setIsRunning,
+    runs,
+    seed,
   } = useTrainingStore();
 
   const [isMounted, setIsMounted] = React.useState(false);
+  const [copiedLogs, setCopiedLogs] = React.useState(false);
+  const [streamView, setStreamView] = React.useState<"log" | "tree">("log");
   const logEndRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -90,6 +96,146 @@ export function TrainWorkspace() {
     });
   }, [logs]);
 
+
+  const handleCopyLogs = async () => {
+    if (streamView === "tree") {
+      if (!archyText) return;
+      try {
+        await navigator.clipboard.writeText(archyText.trimEnd());
+        setCopiedLogs(true);
+        window.setTimeout(() => setCopiedLogs(false), 1500);
+      } catch (err) {
+        console.warn("Failed to copy logs:", err);
+      }
+      return;
+    }
+    if (!logs || logs.length === 0) return;
+    const payload = logs
+      .map((log) => {
+        const ts = log.time ? `[${log.time}]` : "";
+        const epoch =
+          log.epoch !== null && log.epoch !== undefined
+            ? ` (Epoch ${log.epoch})`
+            : "";
+        return `${ts}${epoch} ${log.msg}`.trim();
+      })
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopiedLogs(true);
+      window.setTimeout(() => setCopiedLogs(false), 1500);
+    } catch (err) {
+      console.warn("Failed to copy logs:", err);
+    }
+  };
+
+  const handleStreamMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (e.target !== e.currentTarget) return;
+    const selection = window.getSelection();
+    if (selection && selection.type === "Range") {
+      selection.removeAllRanges();
+    }
+  };
+
+  const renderTreeLine = (line: string, idx: number) => {
+    const match = line.match(/^([│├└─┬\s]*)(.*)$/);
+    const prefix = match?.[1] ?? "";
+    const content = match?.[2] ?? line;
+
+    const renderContent = () => {
+      if (content.startsWith("Run ")) {
+        return <span className="text-cyan-300">{content}</span>;
+      }
+      if (content.startsWith("Config")) {
+        return <span className="text-amber-300">{content}</span>;
+      }
+      if (content.startsWith("Trials")) {
+        return <span className="text-emerald-300">{content}</span>;
+      }
+      if (content.startsWith("Trial ")) {
+        return <span className="text-fuchsia-300">{content}</span>;
+      }
+      if (content.startsWith("Params:")) {
+        const [, rest = ""] = content.split("Params:");
+        return (
+          <>
+            <span className="text-sky-300">Params:</span>
+            <span className="text-zinc-200">{rest}</span>
+          </>
+        );
+      }
+      if (content.startsWith("Summary:")) {
+        const [, rest = ""] = content.split("Summary:");
+        return (
+          <>
+            <span className="text-orange-300">Summary:</span>
+            <span className="text-zinc-200">{rest}</span>
+          </>
+        );
+      }
+      if (content.startsWith("Epoch ")) {
+        const epochMatch = content.match(/^(Epoch\s+\d+)(.*)$/);
+        const epochLabel = epochMatch?.[1] ?? content;
+        const rest = epochMatch?.[2] ?? "";
+        return (
+          <>
+            <span className="text-cyan-200">{epochLabel}</span>
+            {rest && (
+              <span className="text-zinc-100">
+                {rest
+                  .replace("R²", "R²")
+                  .replace("val", "val")
+                  .replace("MAE", "MAE")
+                  .split(/(R²|val|MAE)/g)
+                  .filter(Boolean)
+                  .map((part, i) => {
+                    if (part === "R²") {
+                      return (
+                        <span key={`${idx}-r2-${i}`} className="text-purple-300">
+                          {" "}
+                          {part}
+                        </span>
+                      );
+                    }
+                    if (part === "val") {
+                      return (
+                        <span key={`${idx}-val-${i}`} className="text-rose-300">
+                          {" "}
+                          {part}
+                        </span>
+                      );
+                    }
+                    if (part === "MAE") {
+                      return (
+                        <span key={`${idx}-mae-${i}`} className="text-amber-200">
+                          {" "}
+                          {part}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span key={`${idx}-seg-${i}`} className="text-zinc-100">
+                        {part}
+                      </span>
+                    );
+                  })}
+              </span>
+            )}
+          </>
+        );
+      }
+      return <span className="text-zinc-200">{content}</span>;
+    };
+
+    return (
+      <div key={`tree-${idx}`} className="leading-snug">
+        <span className="text-zinc-600">{prefix}</span>
+        {renderContent()}
+      </div>
+    );
+  };
+
   const datasetName = selectedPredictor
     ? selectedPredictor.split("/").pop()
     : "None Selected";
@@ -104,6 +250,148 @@ export function TrainWorkspace() {
       })),
     [metricsHistory],
   );
+
+  const activeRun = React.useMemo(() => {
+    if (!Array.isArray(runs) || runs.length === 0) return undefined;
+    return (
+      runs.find((r) => (r.status as string) === "running") ||
+      runs.find((r) => (r.status as string) === "queued") ||
+      runs[0]
+    );
+  }, [runs]);
+
+  const trialParamLogs = React.useMemo(() => {
+    const map = new Map<number, string>();
+    const regex = /Trial\s+(\d+)\/\d+\s+params:\s+(.*)$/i;
+    logs?.forEach((log) => {
+      const msg = log.msg ?? "";
+      const match = msg.match(regex);
+      if (!match) return;
+      const trialNum = Math.max(1, parseInt(match[1] || "1", 10));
+      map.set(trialNum, match[2] || "");
+    });
+    return map;
+  }, [logs]);
+
+  const trialSummaryLogs = React.useMemo(() => {
+    const map = new Map<number, string>();
+    const regex = /Trial\s+(\d+)\/\d+\s+summary:\s+(.*)$/i;
+    logs?.forEach((log) => {
+      const msg = log.msg ?? "";
+      const match = msg.match(regex);
+      if (!match) return;
+      const trialNum = Math.max(1, parseInt(match[1] || "1", 10));
+      map.set(trialNum, match[2] || "");
+    });
+    return map;
+  }, [logs]);
+
+  const archyText = React.useMemo(() => {
+    type ArchyNode = { label: string; nodes?: Array<ArchyNode | string> };
+
+    type MetricPoint = (typeof metricsHistory)[number];
+    type TrialPoint = { point: MetricPoint; index: number };
+    const trialGroups = new Map<number, TrialPoint[]>();
+    (metricsHistory ?? []).forEach((point, index) => {
+      const trialNum = typeof point.trial === "number" ? point.trial + 1 : 1;
+      const existing = trialGroups.get(trialNum) || [];
+      existing.push({ point, index });
+      trialGroups.set(trialNum, existing);
+    });
+
+    const trialNodes: ArchyNode[] = Array.from(trialGroups.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([trialNum, points]) => {
+        const epochMap = new Map<number, TrialPoint>();
+        points.forEach((entry) => {
+          const epochVal =
+            typeof entry.point.epoch === "number" ? entry.point.epoch : entry.index;
+          if (!epochMap.has(epochVal)) {
+            epochMap.set(epochVal, entry);
+          }
+        });
+
+        const epochLines = Array.from(epochMap.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([epochVal, { point }]) => {
+            const r2 = typeof point.r2 === "number" ? point.r2.toFixed(4) : "—";
+            const vloss =
+              typeof point.val_loss === "number" ? point.val_loss.toFixed(6) : "—";
+            const mae = typeof point.mae === "number" ? point.mae.toFixed(4) : "—";
+            return `Epoch ${epochVal} R² ${r2} • val ${vloss} • MAE ${mae}`;
+          });
+
+        const params = trialParamLogs.get(trialNum);
+        const summary = trialSummaryLogs.get(trialNum);
+
+        const nodes: Array<ArchyNode | string> = [];
+        if (params) nodes.push(`Params: ${params}`);
+        if (summary) nodes.push(`Summary: ${summary}`);
+        if (epochLines.length > 0) {
+          nodes.push({
+            label: `Epochs (${epochLines.length})`,
+            nodes: epochLines,
+          });
+        }
+
+        return {
+          label: `Trial ${trialNum}`,
+          nodes,
+        };
+      });
+
+    const runConfig = (activeRun as Record<string, unknown> | undefined)?.config as
+      | Record<string, unknown>
+      | undefined;
+    const configSeed =
+      typeof runConfig?.seed === "number" ? runConfig.seed : parseInt(seed) || 0;
+    const configTrain =
+      typeof runConfig?.train_ratio === "number"
+        ? runConfig.train_ratio
+        : split / 100;
+    const configVal =
+      typeof runConfig?.val_ratio === "number"
+        ? runConfig.val_ratio
+        : (100 - split) / 200;
+    const configTest =
+      typeof runConfig?.test_ratio === "number"
+        ? runConfig.test_ratio
+        : (100 - split) / 200;
+    const splitId =
+      typeof runConfig?.split_id === "string" && runConfig.split_id.trim()
+        ? runConfig.split_id
+        : null;
+    const foldIndex =
+      typeof runConfig?.fold_index === "number" ? runConfig.fold_index : null;
+
+    const configNodes: Array<ArchyNode | string> = [
+      `Seed: ${configSeed}`,
+      `Split: train ${configTrain.toFixed(2)}, val ${configVal.toFixed(
+        2,
+      )}, test ${configTest.toFixed(2)}`,
+    ];
+    if (splitId) configNodes.push(`Split ID: ${splitId}`);
+    if (foldIndex !== null) configNodes.push(`Fold: ${foldIndex}`);
+
+    const runLabel = activeRun?.run_id ? `Run ${activeRun.run_id}` : "Run";
+    const tree: ArchyNode = {
+      label: runLabel,
+      nodes: [
+        { label: "Config", nodes: configNodes },
+        {
+          label: `Trials (${trialNodes.length})`,
+          nodes: trialNodes.length > 0 ? trialNodes : ["No trials yet"],
+        },
+      ],
+    };
+
+    try {
+      return archy(tree);
+    } catch {
+      return "";
+    }
+  }, [activeRun, logs, metricsHistory, seed, split, trialParamLogs, trialSummaryLogs]);
+
 
   return (
     <div
@@ -130,9 +418,9 @@ export function TrainWorkspace() {
                   min="50"
                   max="95"
                   step="5"
-                  className="w-24 h-1 bg-zinc-800 rounded-full appearance-none accent-blue-500 cursor-pointer"
+                  className="w-24 h-1 bg-zinc-800 rounded-full appearance-none accent-[hsl(var(--primary))] cursor-pointer"
                 />
-                <span className="text-[10px] font-mono text-blue-500 w-8">
+                <span className="text-[10px] font-mono text-[hsl(var(--primary))] w-8">
                   {split}%
                 </span>
               </div>
@@ -183,11 +471,11 @@ export function TrainWorkspace() {
                           {metricsHistory?.length ?? 0} points
                         </div>
                         <span className="text-white flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-red-500"></div>{" "}
+                          <div className="w-2 h-2 rounded-full bg-[hsl(var(--danger))]"></div>{" "}
                           Loss
                         </span>
                         <span className="text-white flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>{" "}
+                          <div className="w-2 h-2 rounded-full bg-[hsl(var(--primary))]"></div>{" "}
                           R²
                         </span>
                       </div>
@@ -201,16 +489,16 @@ export function TrainWorkspace() {
                           >
                             <CartesianGrid
                               strokeDasharray="3 3"
-                              stroke="#27272a"
+                              stroke="hsl(var(--border-strong))"
                               vertical={false}
                               horizontal={true}
                             />
                             <XAxis dataKey="step" hide />
                             <YAxis
                               yAxisId="left"
-                              stroke="#3f3f46"
+                              stroke="hsl(var(--foreground-subtle))"
                               tick={{
-                                fill: "#52525b",
+                                fill: "hsl(var(--foreground-dim))",
                                 fontSize: 9,
                                 fontWeight: 600,
                               }}
@@ -220,9 +508,9 @@ export function TrainWorkspace() {
                             <YAxis
                               yAxisId="right"
                               orientation="right"
-                              stroke="#3f3f46"
+                              stroke="hsl(var(--foreground-subtle))"
                               tick={{
-                                fill: "#52525b",
+                                fill: "hsl(var(--foreground-dim))",
                                 fontSize: 9,
                                 fontWeight: 600,
                               }}
@@ -231,14 +519,17 @@ export function TrainWorkspace() {
                             />
                             <Tooltip
                               contentStyle={{
-                                backgroundColor: "#09090b",
-                                border: "1px solid #27272a",
+                                backgroundColor: "hsl(var(--background))",
+                                border: "1px solid hsl(var(--border-strong))",
                                 borderRadius: "6px",
                                 fontSize: "10px",
-                                color: "#fafafa",
+                                color: "hsl(var(--foreground-active))",
                               }}
                               itemStyle={{ padding: "2px 0" }}
-                              cursor={{ stroke: "#27272a", strokeWidth: 1 }}
+                              cursor={{
+                                stroke: "hsl(var(--border-strong))",
+                                strokeWidth: 1,
+                              }}
                               labelFormatter={(_label, payload) => {
                                 const entry = Array.isArray(payload) ? payload[0]?.payload : undefined;
                                 if (!entry) return "Step";
@@ -257,7 +548,7 @@ export function TrainWorkspace() {
                               yAxisId="left"
                               type="monotone"
                               dataKey="loss"
-                              stroke="#ef4444"
+                              stroke="hsl(var(--danger))"
                               strokeWidth={2}
                               dot={false}
                               isAnimationActive={false}
@@ -268,7 +559,7 @@ export function TrainWorkspace() {
                               yAxisId="right"
                               type="monotone"
                               dataKey="r2"
-                              stroke="#3b82f6"
+                              stroke="hsl(var(--primary))"
                               strokeWidth={2}
                               dot={false}
                               isAnimationActive={false}
@@ -346,51 +637,86 @@ export function TrainWorkspace() {
                 </div>
               </Panel>
 
-              <PanelResizeHandle className="h-px bg-zinc-800 hover:bg-blue-500/50 transition-colors cursor-row-resize" />
+              <PanelResizeHandle className="h-px bg-zinc-800 hover:bg-[hsl(var(--primary)/0.5)] transition-colors cursor-row-resize" />
 
               <Panel defaultSize={30} minSize={10}>
                 <div className="h-full bg-zinc-900/50 flex flex-col overflow-hidden">
                   <div className="h-8 border-b border-zinc-800 flex items-center justify-between px-4 bg-black shrink-0">
                     <div className="flex items-center gap-2">
-                      <Terminal size={12} className="text-blue-500" />
+                      <Terminal size={12} className="text-[hsl(var(--primary))]" />
                       <span className="text-[10px] font-bold uppercase tracking-wider text-white">
                         Process Stream
                       </span>
                     </div>
-                    <button
-                      data-testid="btn-clear-logs"
-                      onClick={clearLogs}
-                      className="text-[10px] text-zinc-500 hover:text-white flex items-center gap-1.5 transition-colors"
-                    >
-                      <Trash2 size={10} /> Clear
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        data-testid="btn-toggle-stream"
+                        onClick={() =>
+                          setStreamView((prev) => (prev === "tree" ? "log" : "tree"))
+                        }
+                        className="text-[10px] text-zinc-500 hover:text-white flex items-center gap-1.5 transition-colors"
+                      >
+                        {streamView === "tree" ? "Logs" : "Tree"}
+                      </button>
+                      <button
+                        data-testid="btn-copy-logs"
+                        onClick={handleCopyLogs}
+                        className="text-[10px] text-zinc-500 hover:text-white flex items-center gap-1.5 transition-colors"
+                      >
+                        <Copy size={10} /> {copiedLogs ? "Copied" : "Copy"}
+                      </button>
+                      <button
+                        data-testid="btn-clear-logs"
+                        onClick={clearLogs}
+                        className="text-[10px] text-zinc-500 hover:text-white flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 size={10} /> Clear
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-snug custom-scrollbar bg-black">
-                    {logs?.map((log, i: number) => (
-                      <div key={i} className="flex gap-3 mb-0.5 group">
-                        <span className="text-zinc-800 shrink-0 tabular-nums">
-                          [{log.time}]
-                          {log.epoch !== null && log.epoch !== undefined
-                            ? ` (Epoch ${log.epoch})`
-                            : ""}
-                        </span>
-                        <span
-                          className={`break-words flex-1 ${
-                            log.type === "success"
-                              ? "text-green-500"
-                              : log.type === "warn"
-                                ? "text-yellow-500"
-                                : log.type === "info"
-                                  ? "text-blue-500"
-                                  : log.type === "optuna"
-                                    ? "text-purple-500"
-                                    : "text-zinc-400"
-                          }`}
-                        >
-                          {log.msg}
-                        </span>
-                      </div>
-                    ))}
+                  <div
+                    className="flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-snug custom-scrollbar bg-black"
+                    onMouseDown={handleStreamMouseDown}
+                  >
+                    {streamView === "tree" ? (
+                      archyText ? (
+                        <div className="whitespace-pre text-zinc-500">
+                          {archyText.split("\n").map((line, idx) =>
+                            renderTreeLine(line, idx),
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-600">
+                          No tree data yet.
+                        </div>
+                      )
+                    ) : (
+                      logs?.map((log, i: number) => (
+                        <div key={i} className="flex gap-3 mb-0.5 group">
+                          <span className="text-zinc-800 shrink-0 tabular-nums">
+                            [{log.time}]
+                            {log.epoch !== null && log.epoch !== undefined
+                              ? ` (Epoch ${log.epoch})`
+                              : ""}
+                          </span>
+                          <span
+                            className={`break-words flex-1 ${
+                              log.type === "success"
+                                ? "text-green-500"
+                                : log.type === "warn"
+                                  ? "text-yellow-500"
+                                  : log.type === "info"
+                                    ? "text-blue-500"
+                                    : log.type === "optuna"
+                                      ? "text-purple-500"
+                                      : "text-zinc-400"
+                            }`}
+                          >
+                            {log.msg}
+                          </span>
+                        </div>
+                      ))
+                    )}
                     <div ref={logEndRef} />
                   </div>
                 </div>
