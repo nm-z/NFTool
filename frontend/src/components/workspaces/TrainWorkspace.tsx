@@ -262,6 +262,7 @@ export function TrainWorkspace() {
                               dot={false}
                               isAnimationActive={false}
                               activeDot={{ r: 4, strokeWidth: 0 }}
+                              connectNulls={true}
                             />
                             <Line
                               yAxisId="right"
@@ -272,6 +273,7 @@ export function TrainWorkspace() {
                               dot={false}
                               isAnimationActive={false}
                               activeDot={{ r: 4, strokeWidth: 0 }}
+                              connectNulls={true}
                             />
                           </RechartsLineChart>
                         </ResponsiveContainer>

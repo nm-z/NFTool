@@ -33,7 +33,7 @@ def train_model(
     batch_size: int = 32,
     gpu_throttle_sleep: float = 0.1,
     check_stop: Callable[[], bool] | None = None,
-    on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
+    on_epoch_end: Callable[[int, int, float, float, float, float], None] | None = None,
     checkpoint_callback: Callable[[nn.Module, float, float, float, int], None] | None = None,
 ) -> tuple[nn.Module | None, float, dict]:
     """Train a dense neural network and return (model, best_val_loss, history)."""
@@ -90,7 +90,7 @@ def train_model(
         history["mae"].append(mae)
 
         if on_epoch_end:
-            on_epoch_end(epoch, num_epochs, avg_epoch_loss, val_loss, r2)
+            on_epoch_end(epoch, num_epochs, avg_epoch_loss, val_loss, r2, mae)
 
         if gpu_throttle_sleep > 0:
             time.sleep(gpu_throttle_sleep)
@@ -125,7 +125,7 @@ def train_cnn_model(
     batch_size: int = 16,
     gpu_throttle_sleep: float = 0.1,
     check_stop: Callable[[], bool] | None = None,
-    on_epoch_end: Callable[[int, int, float, float, float], None] | None = None,
+    on_epoch_end: Callable[[int, int, float, float, float, float], None] | None = None,
     checkpoint_callback: Callable[[nn.Module, float, float, float, int], None] | None = None,
 ) -> tuple[nn.Module | None, float, dict]:
     """Train a CNN model. Inputs can be numpy arrays or torch tensors."""
@@ -185,7 +185,7 @@ def train_cnn_model(
         history["mae"].append(mae)
 
         if on_epoch_end:
-            on_epoch_end(epoch, num_epochs, avg_epoch_loss, val_loss, r2)
+            on_epoch_end(epoch, num_epochs, avg_epoch_loss, val_loss, r2, mae)
 
         if gpu_throttle_sleep > 0:
             time.sleep(gpu_throttle_sleep)

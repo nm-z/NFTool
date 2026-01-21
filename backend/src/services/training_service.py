@@ -193,14 +193,14 @@ def run_training_task(
             config, run_dir, run_id, conn_mgr,
         )
 
-        def on_epoch_end(epoch: int, n_eps: int, loss: float, v_loss: float, r2: float):
+        def on_epoch_end(epoch: int, n_eps: int, loss: float, v_loss: float, r2: float, mae: float):
             cur_trial = int(getattr(run, "current_trial", 0))
             prog = int((cur_trial / max(1, config.optuna_trials)) * 100)
             run_any: Any = run
             run_any.progress = prog
             metric_point = {
                 "trial": cur_trial, "epoch": epoch, "loss": loss, "r2": r2,
-                "mae": 0, "val_loss": v_loss,
+                "mae": mae, "val_loss": v_loss,
             }
             hist = list(getattr(run, "metrics_history", []) or [])
             hist.append(metric_point)
@@ -208,7 +208,7 @@ def run_training_task(
             logs = list(getattr(run, "logs", []) or [])
             logs.append({
                 "time": datetime.now().strftime("%H:%M:%S"),
-                "msg": f"Epoch {epoch}/{n_eps}: v_loss={v_loss:.6f}, r2={r2:.4f}",
+                "msg": f"Epoch {epoch}/{n_eps}: v_loss={v_loss:.6f}, r2={r2:.4f}, mae={mae:.4f}",
                 "type": "info", "epoch": epoch,
             })
             run_any.logs = logs
