@@ -390,7 +390,7 @@ export function Inspector({
                     label="Batch Size"
                     value={batchSize}
                     onChange={setBatchSize}
-                    min={1}
+                    min={2}
                     max={4096}
                     step={1}
                     tooltip="The number of training samples used in one iteration to update weights."
