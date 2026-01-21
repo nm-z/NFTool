@@ -90,6 +90,9 @@ def _prepare_data(
         db_log_and_broadcast(db, run_id, msg, conn_mgr, "error")
         raise
     df_y = df_y.dropna()
+    common_index = df_x.index.intersection(df_y.index)
+    df_x = df_x.loc[common_index]
+    df_y = df_y.loc[common_index]
 
     min_len: int = int(min(len(df_x), len(df_y)))
     x_raw: Any = df_x.iloc[:min_len].values

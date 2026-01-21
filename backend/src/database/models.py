@@ -40,7 +40,7 @@ class Run(Base):
     config = mapped_column(JSON)
     report_path = mapped_column(String, nullable=True)
     metrics_history = mapped_column(JSON, nullable=True)
-    logs = mapped_column(JSON, default=[])
+    logs = mapped_column(JSON, default=list)
 
 
 class ModelCheckpoint(Base):
