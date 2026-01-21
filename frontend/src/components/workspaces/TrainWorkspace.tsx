@@ -201,8 +201,9 @@ export function TrainWorkspace() {
                           >
                             <CartesianGrid
                               strokeDasharray="3 3"
-                              stroke="#18181b"
+                              stroke="#27272a"
                               vertical={false}
+                              horizontal={true}
                             />
                             <XAxis dataKey="step" hide />
                             <YAxis
@@ -246,6 +247,10 @@ export function TrainWorkspace() {
                                 const epochLabel =
                                   entry.epoch != null ? `Epoch ${entry.epoch}` : "Epoch ?";
                                 return `${trialLabel} • ${epochLabel}`;
+                              }}
+                              formatter={(value: number, name: string) => {
+                                const precision = name === "loss" || name === "r2" ? 6 : 4;
+                                return [value?.toFixed(precision) ?? "—", name === "loss" ? "Loss" : "R²"];
                               }}
                             />
                             <Line
@@ -368,7 +373,7 @@ export function TrainWorkspace() {
                             : ""}
                         </span>
                         <span
-                          className={
+                          className={`break-words flex-1 ${
                             log.type === "success"
                               ? "text-green-500"
                               : log.type === "warn"
@@ -378,7 +383,7 @@ export function TrainWorkspace() {
                                   : log.type === "optuna"
                                     ? "text-purple-500"
                                     : "text-zinc-400"
-                          }
+                          }`}
                         >
                           {log.msg}
                         </span>
