@@ -18,6 +18,8 @@ type EvalResult = {
   accuracy_percent: number;
   mape_percent: number;
   r2_score: number;
+  mae: number;
+  rmse: number;
   count: number;
   comparisons: EvalComparison[];
 };
@@ -237,9 +239,14 @@ export function InferencePlayground({
               <div className="text-[28px] font-mono text-[hsl(var(--primary))] tracking-tighter tabular-nums leading-none">
                 {evaluation.accuracy_percent.toFixed(2)}%
               </div>
-              <div className="text-[10px] text-[hsl(var(--foreground-muted))] mt-2 flex justify-between">
-                <span>MAPE: {evaluation.mape_percent.toFixed(2)}%</span>
-                <span>R²: {evaluation.r2_score.toFixed(4)}</span>
+              <div className="text-[10px] text-[hsl(var(--foreground-muted))] mt-2 space-y-1">
+                <div className="flex justify-between">
+                  <span>MAE: {evaluation.mae.toFixed(6)}</span>
+                  <span>RMSE: {evaluation.rmse.toFixed(6)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>R²: {evaluation.r2_score.toFixed(4)}</span>
+                </div>
               </div>
             </div>
             <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden">

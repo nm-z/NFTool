@@ -490,8 +490,10 @@ async def evaluate_inference(
         )
 
     # Calculate R2 for the evaluation set
-    from sklearn.metrics import r2_score
+    from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
     r2 = float(r2_score(y_true, y_pred))
+    mae = float(mean_absolute_error(y_true, y_pred))
+    rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
     if device.type == "cuda":
         torch.cuda.empty_cache()
@@ -501,6 +503,8 @@ async def evaluate_inference(
         "accuracy_percent": round(accuracy, 4),
         "mape_percent": round(mape * 100.0, 4),
         "r2_score": round(r2, 4),
+        "mae": round(mae, 6),
+        "rmse": round(rmse, 6),
         "count": len(y_true),
         "comparisons": comparisons,
     }

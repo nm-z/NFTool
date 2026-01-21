@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import {
   Activity,
@@ -53,7 +54,8 @@ export function TrainWorkspace() {
 
   const [isMounted, setIsMounted] = React.useState(false);
   const [copiedLogs, setCopiedLogs] = React.useState(false);
-  const [streamView, setStreamView] = React.useState<"log" | "tree">("log");
+  const [streamView, setStreamView] = React.useState<"log" | "tree">("tree");
+  const [epochFolded, setEpochFolded] = React.useState(true);
   const logEndRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -251,6 +253,22 @@ export function TrainWorkspace() {
     [metricsHistory],
   );
 
+  const trialBoundaries = React.useMemo(() => {
+    const boundaries: number[] = [];
+    let lastTrial: number | null = null;
+    chartData.forEach((point) => {
+      const currentTrial = typeof point.trial === "number" ? point.trial : 0;
+      if (lastTrial !== null && currentTrial !== lastTrial) {
+        boundaries.push(point.step);
+      }
+      lastTrial = currentTrial;
+    });
+    if (boundaries.length > 0) {
+      console.debug("Trial boundaries detected:", boundaries, "Total data points:", chartData.length);
+    }
+    return boundaries;
+  }, [chartData]);
+
   const activeRun = React.useMemo(() => {
     if (!Array.isArray(runs) || runs.length === 0) return undefined;
     return (
@@ -311,15 +329,28 @@ export function TrainWorkspace() {
           }
         });
 
-        const epochLines = Array.from(epochMap.entries())
-          .sort(([a], [b]) => a - b)
+        let allEpochEntries = Array.from(epochMap.entries()).sort(([a], [b]) => a - b);
+
+        // Show last 5 epochs if folded, otherwise show all
+        const displayEpochEntries = epochFolded
+          ? allEpochEntries.slice(-5)
+          : allEpochEntries;
+
+        const epochLines = displayEpochEntries
           .map(([epochVal, { point }]) => {
             const r2 = typeof point.r2 === "number" ? point.r2.toFixed(4) : "—";
             const vloss =
               typeof point.val_loss === "number" ? point.val_loss.toFixed(6) : "—";
             const mae = typeof point.mae === "number" ? point.mae.toFixed(4) : "—";
-            return `Epoch ${epochVal} R² ${r2} • val ${vloss} • MAE ${mae}`;
+            return `Epoch ${epochVal} R² ${r2} • val ${vloss.padStart(9)} • MAE ${mae}`;
           });
+
+        // Build epoch label with live progress indicator
+        let epochLabel = `Epochs (${epochLines.length})`;
+        if (allEpochEntries.length > 0) {
+          const maxEpoch = allEpochEntries[allEpochEntries.length - 1]?.[0] ?? 0;
+          epochLabel = `Epochs (${maxEpoch})`;
+        }
 
         const params = trialParamLogs.get(trialNum);
         const summary = trialSummaryLogs.get(trialNum);
@@ -329,7 +360,7 @@ export function TrainWorkspace() {
         if (summary) nodes.push(`Summary: ${summary}`);
         if (epochLines.length > 0) {
           nodes.push({
-            label: `Epochs (${epochLines.length})`,
+            label: epochLabel,
             nodes: epochLines,
           });
         }
@@ -390,7 +421,7 @@ export function TrainWorkspace() {
     } catch {
       return "";
     }
-  }, [activeRun, logs, metricsHistory, seed, split, trialParamLogs, trialSummaryLogs]);
+  }, [activeRun, logs, metricsHistory, seed, split, trialParamLogs, trialSummaryLogs, epochFolded]);
 
 
   return (
@@ -566,6 +597,16 @@ export function TrainWorkspace() {
                               activeDot={{ r: 4, strokeWidth: 0 }}
                               connectNulls={true}
                             />
+                            {trialBoundaries.map((stepIdx) => (
+                              <ReferenceLine
+                                key={`trial-boundary-${stepIdx}`}
+                                x={stepIdx}
+                                stroke="hsl(var(--border-strong))"
+                                strokeDasharray="4 4"
+                                strokeWidth={1}
+                                isFront={false}
+                              />
+                            ))}
                           </RechartsLineChart>
                         </ResponsiveContainer>
                       ) : (
@@ -649,15 +690,44 @@ export function TrainWorkspace() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button
-                        data-testid="btn-toggle-stream"
-                        onClick={() =>
-                          setStreamView((prev) => (prev === "tree" ? "log" : "tree"))
-                        }
-                        className="text-[10px] text-zinc-500 hover:text-white flex items-center gap-1.5 transition-colors"
-                      >
-                        {streamView === "tree" ? "Logs" : "Tree"}
-                      </button>
+                      <div className="flex items-center gap-1 bg-zinc-800 rounded p-0.5">
+                        <button
+                          data-testid="btn-toggle-tree"
+                          onClick={() => setStreamView("tree")}
+                          className={`text-[10px] px-2 py-1 rounded transition-colors ${
+                            streamView === "tree"
+                              ? "bg-[hsl(var(--primary))] text-white font-semibold"
+                              : "text-zinc-400 hover:text-zinc-200"
+                          }`}
+                        >
+                          Tree
+                        </button>
+                        <button
+                          data-testid="btn-toggle-logs"
+                          onClick={() => setStreamView("log")}
+                          className={`text-[10px] px-2 py-1 rounded transition-colors ${
+                            streamView === "log"
+                              ? "bg-[hsl(var(--primary))] text-white font-semibold"
+                              : "text-zinc-400 hover:text-zinc-200"
+                          }`}
+                        >
+                          Logs
+                        </button>
+                      </div>
+                      {streamView === "tree" && (
+                        <button
+                          data-testid="btn-toggle-fold"
+                          onClick={() => setEpochFolded((prev) => !prev)}
+                          className={`text-[10px] px-2 py-1 rounded transition-colors ${
+                            epochFolded
+                              ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                              : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                          }`}
+                          title={epochFolded ? "Show all epochs" : "Show last 5 epochs"}
+                        >
+                          {epochFolded ? "Unfold" : "Fold"}
+                        </button>
+                      )}
                       <button
                         data-testid="btn-copy-logs"
                         onClick={handleCopyLogs}
