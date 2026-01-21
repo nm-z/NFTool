@@ -338,6 +338,12 @@ export default function Dashboard() {
                 } else if (statusStr === "queued" || statusStr === "pending") {
                   setIsRunning(false);
                   setIsStarting(true);
+                } else if (statusStr === "completed" || statusStr === "failed" || statusStr === "aborted") {
+                  // Training finished - reset running state but preserve results
+                  setIsRunning(false);
+                  setIsStarting(false);
+                  setIsAborting(false);
+                  setTrialInfo(0, 0);
                 } else {
                   setIsRunning(false);
                   setIsStarting(false);
@@ -426,12 +432,26 @@ export default function Dashboard() {
                   (r["status"] as string | undefined) === "queued",
               )
             : undefined;
+          const completed = Array.isArray(runsJson)
+            ? runsJson.find(
+                (r: Record<string, unknown>) => {
+                  const status = r["status"] as string | undefined;
+                  return status === "completed" || status === "failed" || status === "aborted";
+                }
+              )
+            : undefined;
           if (active) {
             setIsRunning(true);
             setIsStarting(false);
           } else if (queued) {
             setIsRunning(false);
             setIsStarting(true);
+          } else if (completed) {
+            // Training finished - reset running state but preserve results
+            setIsRunning(false);
+            setIsStarting(false);
+            setIsAborting(false);
+            setTrialInfo(0, 0);
           } else {
             setIsRunning(false);
             setIsStarting(false);
@@ -454,7 +474,7 @@ export default function Dashboard() {
         intervalId = null;
       }
     };
-  }, [isMounted, wsStatus, isStarting, setRuns, setIsRunning, setIsStarting]);
+  }, [isMounted, wsStatus, isStarting, setRuns, setIsRunning, setIsStarting, setIsAborting, setTrialInfo]);
 
   const parseRange = (val: string): [number, number] => {
     const parts = val.split("→").map((part) => part.trim());
