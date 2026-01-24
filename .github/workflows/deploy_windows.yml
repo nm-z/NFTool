@@ -49,13 +49,13 @@ jobs:
       run: |
         # --onedir: Creates a folder (Fastest startup for CUDA apps)
         # --add-data: Bundles the frontend inside the app
-        pyinstaller --onedir --clean --noconfirm ^
-        --name NFTool_CUDA ^
-        --add-data "static;static" ^
-        --collect-all torch ^
-        --hidden-import=uvicorn.loops.auto ^
-        --hidden-import=uvicorn.protocols.http.auto ^
-        run_windows.py
+        pyinstaller --onedir --clean --noconfirm `
+          --name NFTool_CUDA `
+          --add-data "static;static" `
+          --collect-all torch `
+          --hidden-import=uvicorn.loops.auto `
+          --hidden-import=uvicorn.protocols.http.auto `
+          run_windows.py
 
     # 5. Zip and Upload
     - name: Zip Release
