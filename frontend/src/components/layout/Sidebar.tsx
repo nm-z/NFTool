@@ -28,6 +28,7 @@ export function Sidebar({
           active={activeWorkspace === "Library"}
           onClick={() => setActiveWorkspace("Library")}
           tooltip="Library"
+          dataTestId="nav-library"
         />
       </div>
       <NavIcon

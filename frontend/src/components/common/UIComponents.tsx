@@ -8,11 +8,13 @@ export function NavIcon({
   active,
   onClick,
   tooltip,
+  dataTestId,
 }: {
   icon: LucideIcon;
   active: boolean;
   onClick: () => void;
   tooltip: string;
+  dataTestId?: string;
 }) {
   return (
     <Tooltip content={tooltip} side="right" align="center" sideOffset={12}>
@@ -20,6 +22,7 @@ export function NavIcon({
         type="button"
         onClick={onClick}
         aria-label={tooltip}
+        data-testid={dataTestId}
         className={`p-2.5 rounded-md transition-all relative ${active ? "text-[hsl(var(--foreground-active))] bg-[hsl(var(--panel-lighter))]" : "text-[hsl(var(--foreground-dim))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--panel-lighter))]/50"}`}
       >
         <Icon size={20} strokeWidth={active ? 2.5 : 2} />
