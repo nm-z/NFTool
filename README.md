@@ -3,14 +3,14 @@
 Deep learning tool for modular regression analysis and training.
 
 Quick start:
-`docker compose up`
+`npm run tauri:dev`
 
 Visit: `http://localhost:3000` (frontend) and `http://localhost:8001` (backend)
 
-Container-first workflow (recommended):
-- `docker compose exec frontend npm run lint`
-- `docker compose exec frontend npm run build`
-- `docker compose exec backend python -m pytest`
-- `docker compose exec backend python -m pylint src/`
+Local workflow:
+- `npm --prefix frontend run lint`
+- `npm --prefix frontend run build`
+- `python -m pytest backend/tests`
+- `python -m pylint backend/src`
 
-The services run in Docker by default; the repo is bind-mounted into the containers so code changes apply immediately.
+The Tauri dev server starts both the frontend and backend sidecar for local development.

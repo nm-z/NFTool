@@ -494,7 +494,7 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str | None):
     """
     client_api_key = None
 
-    # Only validate API key if one is configured (Docker/dev mode)
+    # Only validate API key if one is configured (development mode)
     if api_key is not None:
         protocols = websocket.headers.get("Sec-WebSocket-Protocol", "").split(",")
         client_api_key = next(

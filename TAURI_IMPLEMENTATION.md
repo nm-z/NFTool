@@ -181,11 +181,11 @@ Allows dynamic ports (`:*` wildcard).
 
 ## Testing Locally
 
-### Development Mode (Docker)
+### Development Mode (API-only)
 
 ```bash
-# Start backend (auto-selects port 8001)
-docker compose up backend
+# Start backend (API-only mode)
+python backend/src/api.py
 
 # Start frontend
 cd frontend && npm run dev
@@ -242,15 +242,15 @@ npm run tauri build
 - Solution: Ensure CSP includes `ws://127.0.0.1:*`
 - Check: Browser console for CSP violations
 
-## Key Differences: Docker vs Tauri
+## Key Differences: API-only vs Tauri
 
-| Feature | Docker (Dev) | Tauri (Production) |
-|---------|-------------|-------------------|
+| Feature | API-only (Dev) | Tauri (Production) |
+|---------|---------------|-------------------|
 | Backend URL | `http://localhost:8001` | `http://127.0.0.1:<dynamic>` |
 | Authentication | API key required | None (local-only) |
 | Data Storage | `workspace/` (repo) | `%APPDATA%\com.nftool.app\` |
 | Port Selection | Hardcoded 8001 | Auto-selected |
-| Process Model | Separate containers | Sidecar subprocess |
+| Process Model | Local process | Sidecar subprocess |
 
 ## Next Steps
 

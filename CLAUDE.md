@@ -4,24 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, orchestrated via Docker Compose with ROCm GPU acceleration.
-Development is container-first; run tests, linting, and build steps inside the Docker services to match runtime dependencies.
+NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, packaged as a Tauri desktop app.
+Development is native-first; run tests, linting, and build steps on the host to match the desktop runtime.
 
 ## Development Commands
 
 ### Running the Application
 ```bash
-# Start full stack
-docker compose up
+# Start the Tauri desktop app (spins up the backend sidecar)
+npm run tauri:dev
 
-# Restart backend only (fastest, for Python code changes)
-docker compose restart backend
-
-# Rebuild backend (for dependency or Dockerfile changes)
-docker compose up -d --no-deps --build backend
-
-# Force recreate backend container
-docker compose up -d --no-deps --build --force-recreate backend
+# Start the backend API directly (API-only mode)
+python backend/src/api.py
 ```
 
 The backend runs on `http://localhost:8001` and frontend on `http://localhost:3000`.
@@ -29,22 +23,22 @@ The backend runs on `http://localhost:8001` and frontend on `http://localhost:30
 ### Testing
 ```bash
 # Run all backend tests
-docker compose exec backend python -m pytest
+python -m pytest backend/tests
 
 # Run specific test file
-docker compose exec backend python -m pytest tests/test_api_schemathesis.py
+python -m pytest backend/tests/test_api_schemathesis.py
 
 # Run with verbose output
-docker compose exec backend python -m pytest -v
+python -m pytest -v backend/tests
 ```
 
 ### Linting
 ```bash
 # Run pylint on backend code
-docker compose exec backend python -m pylint src/
+python -m pylint backend/src/
 
 # Check specific module
-docker compose exec backend python -m pylint src/training/
+python -m pylint backend/src/training/
 ```
 
 ## Architecture
@@ -103,7 +97,7 @@ The following files are read-only and must NOT be modified:
 These files define strict typing rules, linting configurations, and project constraints.
 
 ### Environment Variables
-Default API key: `plyo` (set in `.env` or `docker-compose.yml`)
+Default API key: `plyo` (set in `.env`)
 
 ROCm-specific overrides:
 - `HSA_OVERRIDE_GFX_VERSION=11.0.0` (for RDNA3 GPUs like RX 7700 XT)
@@ -142,7 +136,7 @@ Uses `ResidualBlock1D` modules with skip connections for stable gradient flow in
 ## Performance Notes
 
 ### GPU Acceleration
-Configured for AMD ROCm on RDNA3 hardware. Docker-level device passthrough enables GPU utilization within containers.
+Configured for AMD ROCm on RDNA3 hardware when available on the host system.
 
 ### SNR Calculation
 Uses `RidgeCV` with leave-one-out cross-validation to provide regularized SNR estimates, preventing optimistic bias in high-dimensional feature spaces.

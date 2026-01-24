@@ -4,8 +4,8 @@
 
 NFTool V3 follows a decoupled Client-Server architecture.
 
-### Runtime & Containers
-NFTool is container-first. `docker-compose.yml` orchestrates the FastAPI backend and Next.js frontend, with bind mounts for live code changes and ROCm device passthrough for AMD GPUs. Use `docker compose exec` for dev tooling (tests, linting, builds) so the environment matches the running services.
+### Runtime & Local Development
+NFTool runs natively as a Tauri desktop app. For local development, run the backend and frontend directly on the host so they match the desktop runtime.
 
 ### 1. Backend (Python/FastAPI)
 The backend is modularized into several internal packages:
@@ -31,7 +31,6 @@ The `CNNRegressionNet` uses `ResidualBlock1D` modules. These blocks implement sk
 ## Performance Optimization (AMD ROCm)
 The tool is configured for RDNA3 hardware (e.g., RX 7700 XT) using:
 - `HSA_OVERRIDE_GFX_VERSION=11.0.0`: Enables compatibility for newer GPU architectures.
-- Docker-level device mapping for `/dev/kfd` and `/dev/dri`.
 
 ## API Reference
 

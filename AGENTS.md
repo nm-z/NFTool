@@ -5,17 +5,14 @@
 - `frontend/`: Next.js app. UI code is in `frontend/src/`, with e2e tests in `frontend/tests/e2e/`.
 - `data/`: Training datasets (CSV/Parquet/JSON). Keep sample files small and sanitized.
 - `workspace/`: Runtime artifacts (SQLite DB, logs, model outputs). Treat as generated; don’t commit.
-- `docker-compose.yml`: Primary orchestration for local dev and ROCm GPU passthrough.
 
 ## Build, Test, and Development Commands
-- `docker compose up`: Run full stack (backend on `http://localhost:8001`, frontend on `http://localhost:3000`).
-- `docker compose restart backend`: Quick backend restart after Python-only changes.
-- `docker compose up -d --no-deps --build backend`: Rebuild backend image after dependency/Dockerfile edits.
-- `docker compose exec frontend npm run lint`: ESLint check (inside container).
-- `docker compose exec frontend npm run build` / `npm run start`: Production build and serve (inside container).
-- `docker compose exec backend python -m pytest`: Run backend tests (inside container).
-- `docker compose exec backend python -m pylint src/`: Lint backend code (inside container).
-- Use `docker compose exec <service> ...` for dev tooling so it matches the container runtime.
+- `npm run tauri:dev`: Run the desktop app with the backend sidecar.
+- `python backend/src/api.py`: Start the API directly (API-only mode).
+- `npm --prefix frontend run lint`: ESLint check.
+- `npm --prefix frontend run build` / `npm --prefix frontend run start`: Production build and serve.
+- `python -m pytest backend/tests`: Run backend tests.
+- `python -m pylint backend/src/`: Lint backend code.
 
 ## Coding Style & Naming Conventions
 - Python: 4-space indentation, `snake_case` modules/functions. Keep API types in `backend/src/schemas/`.
@@ -25,15 +22,15 @@
 ## Testing Guidelines
 - Backend: pytest with Schemathesis in `backend/tests/`; name files `test_*.py`.
 - Frontend: Playwright e2e tests in `frontend/tests/e2e/*.spec.ts`.
-- Playwright expects the frontend running and the backend reachable (the tests wait for a CONNECTED state). Prefer running tests inside the containers so dependencies match runtime.
+- Playwright expects the frontend running and the backend reachable (the tests wait for a CONNECTED state).
 
 ## Commit & Pull Request Guidelines
 - Recent history uses short, sentence-case, imperative messages (e.g., “Fix training completion…”). Avoid ticket prefixes unless required.
 - PRs should include: a brief summary, tests run, and UI screenshots when changing the frontend.
 
 ## Configuration & Runtime Notes
-- API calls require `X-API-Key` (default `plyo` in `docker-compose.yml`).
-- ROCm settings (e.g., `HSA_OVERRIDE_GFX_VERSION=11.0.0`) are wired in Docker for AMD GPUs.
+- API calls require `X-API-Key` (default `plyo` in `.env`).
+- ROCm settings (e.g., `HSA_OVERRIDE_GFX_VERSION=11.0.0`) are set on the host for AMD GPUs.
 - For deeper architecture details, see `CLAUDE.md`.
 
 # CLAUDE.md
@@ -42,23 +39,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, orchestrated via Docker Compose with ROCm GPU acceleration. Development is container-first; run tests, linting, and build steps inside the Docker services to match runtime dependencies.
+NFTool is a deep learning tool for modular regression analysis and training. It uses a FastAPI backend (Python/PyTorch) with a Next.js frontend, packaged as a Tauri desktop app. Development is native-first; run tests, linting, and build steps on the host to match runtime dependencies.
 
 ## Development Commands
 
 ### Running the Application
 ```bash
-# Start full stack
-docker compose up
+# Start the Tauri desktop app (spins up the backend sidecar)
+npm run tauri:dev
 
-# Restart backend only (fastest, for Python code changes)
-docker compose restart backend
-
-# Rebuild backend (for dependency or Dockerfile changes)
-docker compose up -d --no-deps --build backend
-
-# Force recreate backend container
-docker compose up -d --no-deps --build --force-recreate backend
+# Start the backend API directly (API-only mode)
+python backend/src/api.py
 ```
 
 The backend runs on `http://localhost:8001` and frontend on `http://localhost:3000`.
@@ -66,22 +57,22 @@ The backend runs on `http://localhost:8001` and frontend on `http://localhost:30
 ### Testing
 ```bash
 # Run all backend tests
-docker compose exec backend python -m pytest
+python -m pytest backend/tests
 
 # Run specific test file
-docker compose exec backend python -m pytest tests/test_api_schemathesis.py
+python -m pytest backend/tests/test_api_schemathesis.py
 
 # Run with verbose output
-docker compose exec backend python -m pytest -v
+python -m pytest -v backend/tests
 ```
 
 ### Linting
 ```bash
 # Run pylint on backend code
-docker compose exec backend python -m pylint src/
+python -m pylint backend/src/
 
 # Check specific module
-docker compose exec backend python -m pylint src/training/
+python -m pylint backend/src/training/
 ```
 
 ## Architecture
@@ -140,7 +131,7 @@ The following files are read-only and must NOT be modified:
 These files define strict typing rules, linting configurations, and project constraints.
 
 ### Environment Variables
-Default API key: `plyo` (set in `.env` or `docker-compose.yml`)
+Default API key: `plyo` (set in `.env`)
 
 ROCm-specific overrides:
 - `HSA_OVERRIDE_GFX_VERSION=11.0.0` (for RDNA3 GPUs like RX 7700 XT)
@@ -179,7 +170,7 @@ Uses `ResidualBlock1D` modules with skip connections for stable gradient flow in
 ## Performance Notes
 
 ### GPU Acceleration
-Configured for AMD ROCm on RDNA3 hardware. Docker-level device passthrough enables GPU utilization within containers.
+Configured for AMD ROCm on RDNA3 hardware when available on the host system.
 
 ### SNR Calculation
 Uses `RidgeCV` with leave-one-out cross-validation to provide regularized SNR estimates, preventing optimistic bias in high-dimensional feature spaces.
