@@ -2,7 +2,7 @@ name: Deploy Windows CUDA App
 
 on:
   push:
-    branches: [ "local", "main" ]
+    branches: [ "windows", "local", "main" ]
   workflow_dispatch:
 
 jobs:
