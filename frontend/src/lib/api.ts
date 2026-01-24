@@ -29,8 +29,7 @@ export async function getBaseUrl(): Promise<string> {
   // In Tauri mode, ask Rust for the port
   if (isTauriEnvironment()) {
     try {
-      // @ts-ignore - Tauri globals
-      const { invoke } = window.__TAURI__.tauri;
+      const { invoke } = window.__TAURI__!.tauri;
 
       // Retry logic: Backend might not be ready immediately
       let retries = 10;
@@ -80,12 +79,11 @@ export function waitForBackendReady(): Promise<void> {
 
   return new Promise((resolve) => {
     try {
-      // @ts-ignore - Tauri globals
-      const { event } = window.__TAURI__;
+      const { event } = window.__TAURI__!;
 
       // Listen for backend-ready event
-      event.listen("backend-ready", (event: any) => {
-        console.log("Backend ready on port:", event.payload);
+      event.listen("backend-ready", (backendEvent: { payload: unknown }) => {
+        console.log("Backend ready on port:", backendEvent.payload);
         resolve();
       });
 
