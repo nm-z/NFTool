@@ -837,7 +837,7 @@ function RunDetailView({
                               entry.epoch != null ? `Epoch ${entry.epoch}` : "Epoch ?";
                             return `${trialLabel} • ${epochLabel}`;
                           }}
-                          formatter={(value: number | undefined, name: string) => {
+                          formatter={(value: number | undefined, name: string | undefined) => {
                             const precision = name === "val_loss" ? 6 : 4;
                             const label = name === "val_loss" ? "Val Loss" : "R²";
                             return [value?.toFixed(precision) ?? "—", label];
@@ -888,7 +888,7 @@ function RunDetailView({
                             fontSize: "10px",
                             color: "hsl(var(--foreground-active))",
                           }}
-                          formatter={(value: number) => [value?.toFixed(4) ?? "—", "Best R²"]}
+                          formatter={(value: number | undefined) => [value?.toFixed(4) ?? "—", "Best R²"]}
                         />
                         <Bar dataKey="best_r2" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
                       </BarChart>
@@ -930,7 +930,7 @@ function RunDetailView({
                             fontSize: "10px",
                             color: "hsl(var(--foreground-active))",
                           }}
-                          formatter={(value: number, name: string) => [
+                          formatter={(value: number | undefined, name: string | undefined) => [
                             value?.toFixed(4) ?? "—",
                             name === "predicted" ? "Predicted" : "Actual",
                           ]}
@@ -981,7 +981,7 @@ function RunDetailView({
                               : undefined;
                             return entry?.label || "Residuals";
                           }}
-                          formatter={(value: number) => [value ?? 0, "Count"]}
+                          formatter={(value: number | undefined) => [value ?? 0, "Count"]}
                         />
                         <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                       </BarChart>
