@@ -19,6 +19,7 @@ export function NavIcon({
       <button
         type="button"
         onClick={onClick}
+        aria-label={tooltip}
         className={`p-2.5 rounded-md transition-all relative ${active ? "text-[hsl(var(--foreground-active))] bg-[hsl(var(--panel-lighter))]" : "text-[hsl(var(--foreground-dim))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--panel-lighter))]/50"}`}
       >
         <Icon size={20} strokeWidth={active ? 2.5 : 2} />
@@ -44,6 +45,7 @@ export function IconButton({
       <button
         type="button"
         onClick={onClick}
+        aria-label={tooltip}
         className="p-1.5 rounded hover:bg-[hsl(var(--panel-lighter))] text-[hsl(var(--foreground))] hover:text-[hsl(var(--foreground-active))] transition-all"
       >
         <Icon size={16} />

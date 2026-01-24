@@ -21,5 +21,9 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: true,
+    env: {
+      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001",
+      NEXT_PUBLIC_API_KEY: process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key",
+    },
   },
 });

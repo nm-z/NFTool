@@ -99,6 +99,7 @@ export function Inspector({
                     <select
                       value={selectedPredictor}
                       onChange={(e) => setSelectedPredictor(e.target.value)}
+                      data-testid="select-predictors"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-[hsl(var(--primary))] transition-colors"
                     >
                       {datasets?.map((d: { name?: string; path?: string }) => (
@@ -115,6 +116,7 @@ export function Inspector({
                     <select
                       value={selectedTarget}
                       onChange={(e) => setSelectedTarget(e.target.value)}
+                      data-testid="select-targets"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-[hsl(var(--primary))] transition-colors"
                     >
                       {datasets?.map((d: { name?: string; path?: string }) => (

@@ -155,7 +155,10 @@ export default function Dashboard() {
         return;
       }
       try {
-        const dsRes = await fetch(`${API_URL}/data/datasets`);
+        const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
+        const dsRes = await fetch(`${API_URL}/data/datasets`, {
+          headers: { "X-API-Key": API_KEY },
+        });
         if (dsRes.ok) {
           const data = await dsRes.json();
           if (Array.isArray(data)) {
@@ -180,7 +183,10 @@ export default function Dashboard() {
       }
 
       try {
-        const runsRes = await fetch(`${API_URL}/training/runs`);
+        const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
+        const runsRes = await fetch(`${API_URL}/training/runs`, {
+          headers: { "X-API-Key": API_KEY },
+        });
         if (runsRes.ok) {
           const runsJson = await runsRes.json();
           setRuns(runsJson);
@@ -410,7 +416,10 @@ export default function Dashboard() {
     const shouldPoll = wsStatus === 3 || isStarting;
     const poll = async () => {
       try {
-        const runsRes = await fetch(`${API_URL}/training/runs`);
+        const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
+        const runsRes = await fetch(`${API_URL}/training/runs`, {
+          headers: { "X-API-Key": API_KEY },
+        });
         if (runsRes.ok) {
           const runsJson = await runsRes.json();
           setRuns(runsJson);
@@ -620,10 +629,12 @@ export default function Dashboard() {
       startTimeoutRef.current = null;
     }, 10000);
     try {
+      const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
       const res = await fetch(`${API_URL}/training/train`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-API-Key": API_KEY,
         },
         body: JSON.stringify(config),
       });
@@ -662,7 +673,9 @@ export default function Dashboard() {
       const runId = data.run_id;
       (async function immediateRunSync(id: string) {
         try {
-          const runsRes = await fetch(`${API_URL}/training/runs`);
+          const runsRes = await fetch(`${API_URL}/training/runs`, {
+            headers: { "X-API-Key": API_KEY },
+          });
           if (runsRes.ok) {
             const runsJson = await runsRes.json();
             setRuns(runsJson);
@@ -783,7 +796,10 @@ export default function Dashboard() {
         type: "warn",
       });
       try {
-        const runsRes = await fetch(`${API_URL}/training/runs`);
+        const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
+        const runsRes = await fetch(`${API_URL}/training/runs`, {
+          headers: { "X-API-Key": API_KEY },
+        });
         if (runsRes.ok) {
           const runsJson = await runsRes.json();
           setRuns(runsJson);
