@@ -227,7 +227,21 @@ npm run tauri build
 ### "Module not found" when running sidecar
 
 - PyInstaller didn't bundle all dependencies
-- Solution: Add `--hidden-import=<module>` to pyinstaller command
+- Quick fix: force-collect hidden imports and data files for common scientific stacks
+
+```bash
+pyinstaller --clean --noconfirm --onefile --name nftool-backend --distpath ../src-tauri/binaries run_tauri.py \
+  --collect-submodules torch \
+  --collect-submodules scipy \
+  --collect-submodules sklearn \
+  --collect-data plotly \
+  --collect-data kaleido
+```
+
+- If the CLI approach still fails, switch to a `.spec` file and add:
+  - `collect_submodules(...)`
+  - `collect_data_files(...)`
+  - `collect_dynamic_libs(...)`
 - Check: Run `dist/nftool-backend/nftool-backend.exe` directly to test
 
 ### "Failed to create workspace directory"
