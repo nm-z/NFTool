@@ -837,7 +837,7 @@ function RunDetailView({
                               entry.epoch != null ? `Epoch ${entry.epoch}` : "Epoch ?";
                             return `${trialLabel} • ${epochLabel}`;
                           }}
-                          formatter={(value: number, name: string) => {
+                          formatter={(value: number | undefined, name: string) => {
                             const precision = name === "val_loss" ? 6 : 4;
                             const label = name === "val_loss" ? "Val Loss" : "R²";
                             return [value?.toFixed(precision) ?? "—", label];
