@@ -28,11 +28,13 @@ class Run(Base):
 
     __tablename__ = "runs"
     id = mapped_column(Integer, primary_key=True, index=True)
-    timestamp = mapped_column(DateTime, default=datetime.now, nullable=False)
+    # Index on timestamp for efficient ordering by creation time
+    timestamp = mapped_column(DateTime, default=datetime.now, nullable=False, index=True)
     # e.g. PASS_7721
     run_id = mapped_column(String, unique=True, index=True, nullable=False)
     model_choice = mapped_column(String, nullable=False)
-    status = mapped_column(String, nullable=False)  # running, completed, aborted, failed
+    # Index on status for efficient filtering of running/completed runs
+    status = mapped_column(String, nullable=False, index=True)  # running, completed, aborted, failed
     progress = mapped_column(Integer, default=0, nullable=False)
     current_trial = mapped_column(Integer, default=0, nullable=False)
     best_r2 = mapped_column(Float, default=-1.0e9, nullable=False)
@@ -62,7 +64,8 @@ class ModelCheckpoint(Base):
 
     __tablename__ = "checkpoints"
     id = mapped_column(Integer, primary_key=True, index=True)
-    run_id = mapped_column(Integer, ForeignKey("runs.id"), nullable=False)
+    # Index on run_id for efficient checkpoint queries per run
+    run_id = mapped_column(Integer, ForeignKey("runs.id"), nullable=False, index=True)
     timestamp = mapped_column(DateTime, default=datetime.now, nullable=False)
     model_path = mapped_column(String, nullable=False)
     scaler_path = mapped_column(String, nullable=False)

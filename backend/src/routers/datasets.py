@@ -3,6 +3,8 @@
 import logging
 import os
 import tempfile
+import threading
+import time
 import zipfile
 from typing import Any
 
@@ -29,6 +31,12 @@ ALLOWED_ROOTS = [
 DATASET_FOLDER_DEFAULT = Form(...)
 PREDICTOR_FILES_DEFAULT = File(None)
 TARGET_FILES_DEFAULT = File(None)
+
+# Thread-safe cache for asset tree to avoid repeated filesystem traversal
+_asset_tree_cache: dict[str, Any] = {}
+_asset_tree_cache_time: float = 0.0
+_asset_tree_cache_lock = threading.Lock()
+_ASSET_TREE_CACHE_TTL: float = 5.0  # Cache TTL in seconds
 
 
 def _ensure_list_like(value):
@@ -101,15 +109,8 @@ def list_datasets(_api_key: str = VERIFY_API_KEY_DEP):
     ]
 
 
-@router.get(
-    "/assets/tree",
-    responses={
-        200: {"description": "Dataset + model asset tree"},
-        406: {"description": "Missing or invalid API key"},
-    },
-)
-def list_asset_tree(_api_key: str = VERIFY_API_KEY_DEP):
-    """Return a tree of datasets and model checkpoints for the UI explorer."""
+def _build_asset_tree_uncached() -> dict[str, Any]:
+    """Build the asset tree without caching (internal helper)."""
     builtin_data_dir = os.path.join(REPO_ROOT, "data")
     hold2_files: list[dict[str, Any]] = []
     if os.path.exists(builtin_data_dir):
@@ -160,6 +161,39 @@ def list_asset_tree(_api_key: str = VERIFY_API_KEY_DEP):
             },
         ]
     }
+
+
+@router.get(
+    "/assets/tree",
+    responses={
+        200: {"description": "Dataset + model asset tree"},
+        406: {"description": "Missing or invalid API key"},
+    },
+)
+def list_asset_tree(_api_key: str = VERIFY_API_KEY_DEP):
+    """Return a tree of datasets and model checkpoints for the UI explorer.
+    
+    Uses a short TTL cache with thread-safe access to avoid repeated filesystem 
+    traversals on frequent requests.
+    """
+    global _asset_tree_cache, _asset_tree_cache_time  # noqa: PLW0603
+    
+    current_time = time.time()
+    
+    # Fast path: check cache without lock (stale reads are OK for this use case)
+    if _asset_tree_cache and (current_time - _asset_tree_cache_time) < _ASSET_TREE_CACHE_TTL:
+        return _asset_tree_cache
+    
+    # Slow path: acquire lock and rebuild cache
+    with _asset_tree_cache_lock:
+        # Double-check after acquiring lock (another thread may have refreshed)
+        if _asset_tree_cache and (current_time - _asset_tree_cache_time) < _ASSET_TREE_CACHE_TTL:
+            return _asset_tree_cache
+        
+        result = _build_asset_tree_uncached()
+        _asset_tree_cache = result
+        _asset_tree_cache_time = time.time()
+        return result
 
 
 @router.post(

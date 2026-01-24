@@ -183,12 +183,19 @@ class ConnectionManager:
         }
 
     async def _forward_checkpoints(self, db: Any, run: Run) -> None:
-        """Query ModelCheckpoint rows for a run and broadcast them as metric points."""
+        """Query ModelCheckpoint rows for a run and broadcast them as metric points.
+        
+        Optimized to only fetch checkpoints newer than the last forwarded one.
+        """
+        last_ck = self._tracking["checkpoint_id"].get(self.active_run_id, 0)
         try:
+            # Only query checkpoints we haven't forwarded yet
             ckpts = (
                 db.query(ModelCheckpoint)
-                .join(Run)
-                .filter(ModelCheckpoint.run_id == run.id)
+                .filter(
+                    ModelCheckpoint.run_id == run.id,
+                    ModelCheckpoint.id > last_ck
+                )
                 .order_by(ModelCheckpoint.id)
                 .all()
             )
@@ -196,10 +203,7 @@ class ConnectionManager:
             logger.exception("Failed to query ModelCheckpoint rows")
             return
 
-        last_ck = self._tracking["checkpoint_id"].get(self.active_run_id, 0)
         for ck in ckpts:
-            if int(getattr(ck, "id", 0)) <= last_ck:
-                continue
             fname = os.path.basename(str(getattr(ck, "model_path", "") or ""))
             trial_num = int(getattr(ck, "trial", 0) or 0)
             epoch_num = int(getattr(ck, "epoch", 0) or 0)
@@ -365,21 +369,21 @@ class ConnectionManager:
                         self._tracking["status"][self.active_run_id] = status_snapshot
 
                     # Also forward any newly created ModelCheckpoint rows as
-                    # metric points
+                    # metric points. Only query checkpoints newer than last forwarded.
                     try:
-                        ckpts = (
-                            db.query(ModelCheckpoint)
-                            .join(Run)
-                            .filter(ModelCheckpoint.run_id == run.id)
-                            .order_by(ModelCheckpoint.id)
-                            .all()
-                        )
                         last_ck = self._tracking["checkpoint_id"].get(
                             self.active_run_id, 0
                         )
+                        ckpts = (
+                            db.query(ModelCheckpoint)
+                            .filter(
+                                ModelCheckpoint.run_id == run.id,
+                                ModelCheckpoint.id > last_ck
+                            )
+                            .order_by(ModelCheckpoint.id)
+                            .all()
+                        )
                         for ck in ckpts:
-                            if int(getattr(ck, "id", 0)) <= last_ck:
-                                continue
                             fname = os.path.basename(
                                 str(getattr(ck, "model_path", "")) or ""
                             )

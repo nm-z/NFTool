@@ -89,9 +89,11 @@ export function TrainWorkspace() {
     setIsRunning,
   ]);
 
+  // Use fast auto scroll when many logs arrive (>50) to reduce jank, smooth otherwise
   React.useEffect(() => {
     if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+      const scrollBehavior = (logs?.length ?? 0) > 50 ? "auto" : "smooth";
+      logEndRef.current.scrollIntoView({ behavior: scrollBehavior as ScrollBehavior });
     }
     console.debug("TrainWorkspace: logs updated", {
       length: logs?.length ?? 0,

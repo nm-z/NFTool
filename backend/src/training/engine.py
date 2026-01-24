@@ -97,8 +97,9 @@ def train_model(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            # Use cpu() without clone() - the state_dict() call already returns a fresh copy
             best_model_state = {
-                k: v.cpu().clone() for k, v in model.state_dict().items()
+                k: v.cpu() for k, v in model.state_dict().items()
             }
             counter = 0
             if checkpoint_callback:
@@ -131,8 +132,9 @@ def train_cnn_model(
     """Train a CNN model. Inputs can be numpy arrays or torch tensors."""
     x_train = preprocess_for_cnn(x_train_np).to(device)
     x_val = preprocess_for_cnn(x_val_np).to(device)
-    y_train = torch.tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
-    y_val = torch.tensor(y_val_np, dtype=torch.float32).unsqueeze(1).to(device)
+    # Use torch.as_tensor for zero-copy conversion when input is already a tensor
+    y_train = torch.as_tensor(y_train_np, dtype=torch.float32).unsqueeze(1).to(device)
+    y_val = torch.as_tensor(y_val_np, dtype=torch.float32).unsqueeze(1).to(device)
 
     input_size = x_train.shape[2]
     model = model_factory("CNN", input_size, config, device)
@@ -192,8 +194,9 @@ def train_cnn_model(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            # Use cpu() without clone() - the state_dict() call already returns a fresh copy
             best_model_state = {
-                k: v.cpu().clone() for k, v in model.state_dict().items()
+                k: v.cpu() for k, v in model.state_dict().items()
             }
             counter = 0
             if checkpoint_callback:
@@ -294,13 +297,14 @@ class Objective:
                     on_trial_start(trial.number, dict(trial.params))
                 except Exception:
                     pass
+            # Use torch.as_tensor for zero-copy conversion when possible
             _, loss, history = train_model(
-                torch.tensor(self.x_train, dtype=torch.float32).to(self.device),
-                torch.tensor(self.y_train, dtype=torch.float32)
+                torch.as_tensor(self.x_train, dtype=torch.float32).to(self.device),
+                torch.as_tensor(self.y_train, dtype=torch.float32)
                 .unsqueeze(1)
                 .to(self.device),
-                torch.tensor(self.x_val, dtype=torch.float32).to(self.device),
-                torch.tensor(self.y_val, dtype=torch.float32)
+                torch.as_tensor(self.x_val, dtype=torch.float32).to(self.device),
+                torch.as_tensor(self.y_val, dtype=torch.float32)
                 .unsqueeze(1)
                 .to(self.device),
                 self.x_train.shape[1],
