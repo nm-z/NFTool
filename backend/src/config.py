@@ -1,7 +1,7 @@
 """Configuration for the NFTool backend.
 
 This module handles environment variables, path discovery, and directory setup.
-Designed to work both in development (Docker/local) and production (Tauri bundled).
+Designed to work both in development (source) and production (Tauri bundled).
 """
 
 import os
