@@ -12,7 +12,7 @@ export async function waitForConnected(page: Page, timeout = 20000) {
 }
 
 export async function openLibraryDataTab(page: Page) {
-  await page.getByRole("button", { name: "Library" }).click();
+  await page.getByTestId("nav-library").click();
   await page.getByRole("tab", { name: "Data" }).click();
 }
 
