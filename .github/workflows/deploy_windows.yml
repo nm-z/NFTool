@@ -46,22 +46,20 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build Python Sidecar
+      - name: Build Python Sidecar (onefile for simplicity)
         working-directory: ./backend
         run: |
-          pyinstaller --noconfirm --onedir --console --name nftool-backend --clean run_tauri.py
+          pyinstaller --clean --noconfirm --onefile --name nftool-backend --distpath ../src-tauri/binaries run_tauri.py
 
-      # 7. Copy Sidecar to Tauri binaries with correct naming
-      - name: Setup Tauri Sidecar
+      # 7. Rename Sidecar Binary for Tauri (Target Triple)
+      # Tauri requires: binary-name-target-triple.exe
+      - name: Rename Sidecar for Tauri
         run: |
-          # Get the target triple
           $targetTriple = "x86_64-pc-windows-msvc"
-
-          # Copy the entire PyInstaller dist folder
-          Copy-Item -Path "backend/dist/nftool-backend" -Destination "src-tauri/binaries/nftool-backend-$targetTriple" -Recurse
-
-          # Rename the exe to match Tauri's expected naming
-          Rename-Item -Path "src-tauri/binaries/nftool-backend-$targetTriple/nftool-backend.exe" -NewName "nftool-backend-$targetTriple.exe"
+          cd src-tauri/binaries
+          if (Test-Path "nftool-backend.exe") {
+            Rename-Item -Path "nftool-backend.exe" -NewName "nftool-backend-$targetTriple.exe"
+          }
 
       # 8. Install Tauri CLI and build
       - name: Install Tauri CLI

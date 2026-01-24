@@ -9,14 +9,13 @@ from datetime import datetime
 from typing import Any
 from typing import cast as typing_cast
 
-from fastapi import Depends, FastAPI, Request, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from src.auth import verify_api_key
-from src.config import API_KEY, LOGS_DIR, REPORTS_DIR, RESULTS_DIR
+from src.config import LOGS_DIR, REPORTS_DIR, RESULTS_DIR
 from src.database.database import SESSION_LOCAL, Base, engine
 from src.database.models import Run
 from src.manager import manager as connection_manager
@@ -128,8 +127,14 @@ app = FastAPI(title="NFTool API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "tauri://localhost",      # Windows/Linux Tauri Production
+        "http://tauri.localhost", # WebKit/macOS Tauri Production
+        "http://localhost:3000",  # Development
+        "http://127.0.0.1:3000",  # Development (explicit IP)
+        "*",                       # Fallback for other dev scenarios
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -180,87 +185,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next: Any) -> Any:
     """
-    Enforce presence of X-API-Key on all /api/v1 routes before body validation.
-    Return 406 when missing or invalid to match test expectations.
+    Basic request logging and CORS header enforcement.
+    No API key validation - Tauri apps run locally without authentication.
     """
-    # Only enforce for API routes under /api/v1
     try:
         path = request.url.path or ""
     except (AttributeError, ValueError) as e:
         logger.error("Error determining request path: %s", e)
         path = ""
+
     logger.debug(
-        "Incoming request: method=%s path=%s headers=%s",
+        "Incoming request: method=%s path=%s",
         request.method,
         path,
-        dict(request.headers),
     )
-    # For HTTP methods not typically used by the API (e.g., TRACE), return 405
-    # Method Not Allowed so behavior matches OpenAPI expectations.
-    allowed_http_methods = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
-    if request.method.upper() not in allowed_http_methods:
-        # Compute allowed methods for this path to include in Allow header per RFC 9110
-        try:
-            allowed_methods_set: set[str] = set()
-            for route in request.app.router.routes:
-                if route.matches(request.scope)[0] is not None:
-                    methods = getattr(route, "methods", None)
-                    if methods:
-                        allowed_methods_set.update(m.upper() for m in methods)
-            allow_header = ", ".join(sorted(allowed_methods_set)) or ", ".join(
-                sorted(allowed_http_methods)
-            )
-        except ImportError:
-            # Handle cases where starlette.routing.Match might not be available
-            logger.warning(
-                "Could not import starlette.routing.Match; dynamic method "
-                "calculation limited."
-            )
-            allow_header = ", ".join(sorted(allowed_http_methods))
-        except (AttributeError, RuntimeError, TypeError) as e:
-            logger.error("Error determining allowed methods: %s", e)
-            allow_header = ", ".join(sorted(allowed_http_methods))
-        return JSONResponse(
-            status_code=405,
-            content={"detail": "Method Not Allowed"},
-            headers={**CORS_HEADERS, "Allow": allow_header},
-        )
-    # Enforce API key at middleware level for training and data routes so the
-    # header requirement is rejected before body validation (matches tests).
-    if path.startswith(("/api/v1/training", "/api/v1/data")):
-        # If the route exists but does not allow this method, return 405 per RFC
-        try:
-            api_allowed_methods: set[str] = set()
-            matched_any = False
-            for route in request.app.router.routes:
-                if route.matches(request.scope)[0] is not None:
-                    matched_any = True
-                    methods = getattr(route, "methods", None)
-                    if methods:
-                        api_allowed_methods.update(m.upper() for m in methods)
-            if (
-                matched_any
-                and request.method.upper() not in api_allowed_methods
-                and request.method.upper() != "OPTIONS"
-            ):
-                allow_header = ", ".join(sorted(api_allowed_methods)) or (
-                    "GET, POST, OPTIONS"
-                )
-                return JSONResponse(
-                    status_code=405,
-                    content={"detail": "Method Not Allowed"},
-                    headers={**CORS_HEADERS, "Allow": allow_header},
-                )
-        except ImportError:
-            logger.warning(
-                "Could not import starlette.routing.Match; dynamic method "
-                "calculation limited."
-            )
-        except (AttributeError, RuntimeError, TypeError) as e:
-            logger.error("Error determining allowed methods for API routes: %s", e)
-        # Do not enforce API key at middleware level; route-level dependencies
-        # handle authentication/validation. Middleware only enforces unsupported
-        # methods (405) above and otherwise forwards to route handlers.
+
     response = await call_next(request)
     response.headers.setdefault("Access-Control-Allow-Origin", "*")
     response.headers.setdefault("Access-Control-Allow-Headers", "*")
@@ -268,19 +207,16 @@ async def api_key_middleware(request: Request, call_next: Any) -> Any:
     return response
 
 
-app.include_router(
-    training.router, prefix="/api/v1/training", dependencies=[Depends(verify_api_key)]
-)
-app.include_router(
-    datasets.router, prefix="/api/v1/data", dependencies=[Depends(verify_api_key)]
-)
+app.include_router(training.router, prefix="/api/v1/training")
+app.include_router(datasets.router, prefix="/api/v1/data")
 app.include_router(hardware.router, prefix="/api/v1")
 
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication."""
-    await websocket_endpoint(websocket, API_KEY)
+    # No API key validation - Tauri apps run locally without authentication
+    await websocket_endpoint(websocket, api_key=None)
 
 
 # MOUNT FRONTEND: Serve Next.js static export from the bundled 'static' folder

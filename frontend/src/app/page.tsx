@@ -9,6 +9,7 @@ import {
 import { Settings, AlertCircle } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useTrainingStore } from "@/store/useTrainingStore";
+import { useApi } from "@/components/ApiProvider";
 
 // Components
 import { Header } from "@/components/layout/Header";
@@ -19,33 +20,10 @@ import { LibraryWorkspace } from "@/components/workspaces/LibraryWorkspace";
 import { Inspector } from "@/components/inspector/Inspector";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
-// API configuration with validation
-//
-// Environment setup:
-// - Local dev (outside Docker): set NEXT_PUBLIC_API_URL=http://localhost:8001 in .env.local
-// - Docker: environment variables are set in docker-compose.yml
-//
-// The API root must be a full HTTP/HTTPS URL that the browser can reach.
-// For Docker, it's http://localhost:8001 (backend service is mapped to host port).
-// For local dev, it's also http://localhost:8001 (backend runs directly on host).
-//
-const API_KEY_ENV = process.env.NEXT_PUBLIC_API_KEY;
-const API_KEY = API_KEY_ENV || "nftool-dev-key";
-
-const API_ROOT_ENV = process.env.NEXT_PUBLIC_API_URL;
-const API_ROOT =
-  API_ROOT_ENV && API_ROOT_ENV.startsWith("http")
-    ? API_ROOT_ENV
-    : "http://localhost:8001";
-const API_URL = `${API_ROOT}/api/v1`;
-
-// WebSocket server is mounted at the application root (`/ws`), not under `/api/v1`.
-const WS_URL = API_ROOT.replace(/^http/, "ws");
-
-const waitForBackend = async (attempts = 5, delayMs = 1000) => {
+const waitForBackend = async (apiUrl: string, attempts = 5, delayMs = 1000) => {
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const res = await fetch(`${API_URL}/health`);
+      const res = await fetch(`${apiUrl}/health`);
       if (res.ok) return true;
     } catch {
       // Swallow network errors; we'll retry below.
@@ -55,18 +33,10 @@ const waitForBackend = async (attempts = 5, delayMs = 1000) => {
   return false;
 };
 
-// Runtime validation and logging
-if (API_ROOT_ENV && !API_ROOT_ENV.startsWith("http")) {
-  console.warn("NEXT_PUBLIC_API_URL is set but doesn't start with 'http', falling back to default:", API_ROOT);
-}
-console.debug("API configuration at runtime:", {
-  API_ROOT_ENV,
-  API_ROOT,
-  API_URL,
-  WS_URL
-});
-
 export default function Dashboard() {
+  // Get dynamic API URLs from context (configured for both dev and Tauri)
+  const { apiUrl: API_URL, wsUrl: WS_URL_BASE } = useApi();
+  const WS_URL = WS_URL_BASE;
   const {
     activeWorkspace,
     setActiveWorkspace,
@@ -106,8 +76,7 @@ export default function Dashboard() {
 
   const refreshRuns = React.useCallback(async () => {
     try {
-      const headers = { "X-API-Key": API_KEY };
-      const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+      const runsRes = await fetch(`${API_URL}/training/runs`);
       if (runsRes.ok) {
         const runsJson = await runsRes.json();
         setRuns(runsJson);
@@ -115,7 +84,7 @@ export default function Dashboard() {
     } catch (e) {
       console.debug("Runs refresh error:", e);
     }
-  }, [setRuns]);
+  }, [setRuns, API_URL]);
 
   const getConnectionStatus = () => {
     switch (wsStatus) {
@@ -175,9 +144,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isMounted) return;
-    const headers = { "X-API-Key": API_KEY };
     const fetchData = async () => {
-      const backendReady = await waitForBackend(8, 1000);
+      const backendReady = await waitForBackend(API_URL, 8, 1000);
       if (!backendReady) {
         console.warn("Backend not ready; retrying initial fetch.");
         if (fetchRetryRef.current) {
@@ -187,7 +155,7 @@ export default function Dashboard() {
         return;
       }
       try {
-        const dsRes = await fetch(`${API_URL}/data/datasets`, { headers });
+        const dsRes = await fetch(`${API_URL}/data/datasets`);
         if (dsRes.ok) {
           const data = await dsRes.json();
           if (Array.isArray(data)) {
@@ -212,7 +180,7 @@ export default function Dashboard() {
       }
 
       try {
-        const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+        const runsRes = await fetch(`${API_URL}/training/runs`);
         if (runsRes.ok) {
           const runsJson = await runsRes.json();
           setRuns(runsJson);
@@ -264,7 +232,7 @@ export default function Dashboard() {
       }
 
       try {
-        const gpuRes = await fetch(`${API_URL}/gpus`, { headers });
+        const gpuRes = await fetch(`${API_URL}/gpus`);
         if (gpuRes.ok) setGpuList(await gpuRes.json());
       } catch (e) {
         console.warn("GPU fetch error:", e);
@@ -277,7 +245,7 @@ export default function Dashboard() {
         fetchRetryRef.current = null;
       }
     };
-  }, [isMounted, setDatasets, setRuns, setGpuList, setSelectedPredictor, setSelectedTarget, setLogs]);
+  }, [isMounted, setDatasets, setRuns, setGpuList, setSelectedPredictor, setSelectedTarget, setLogs, API_URL]);
 
   useEffect(() => {
     if (!isMounted) return;
@@ -286,7 +254,7 @@ export default function Dashboard() {
 
     const connect = async () => {
       if (!active) return;
-      const backendReady = await waitForBackend(3, 1000);
+      const backendReady = await waitForBackend(API_URL, 3, 1000);
       if (!backendReady) {
         if (active) {
           setWsStatus(3);
@@ -295,7 +263,8 @@ export default function Dashboard() {
         return;
       }
       try {
-        ws = new WebSocket(`${WS_URL}/ws`, [`api-key-${API_KEY}`]);
+        // No API key subprotocol needed for Tauri (local auth removed)
+        ws = new WebSocket(`${WS_URL}/ws`);
         socketRef.current = ws;
         setWsStatus(ws.readyState);
 
@@ -430,6 +399,8 @@ export default function Dashboard() {
     setIsAborting,
     setIsStarting,
     refreshRuns,
+    API_URL,
+    WS_URL,
   ]);
 
   // Polling fallback: when WebSocket is disconnected or while starting, poll runs
@@ -439,8 +410,7 @@ export default function Dashboard() {
     const shouldPoll = wsStatus === 3 || isStarting;
     const poll = async () => {
       try {
-        const headers = { "X-API-Key": API_KEY };
-        const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+        const runsRes = await fetch(`${API_URL}/training/runs`);
         if (runsRes.ok) {
           const runsJson = await runsRes.json();
           setRuns(runsJson);
@@ -526,7 +496,7 @@ export default function Dashboard() {
   }, []);
 
   const handleStartTraining = async () => {
-    const backendReady = await waitForBackend();
+    const backendReady = await waitForBackend(API_URL);
     if (!backendReady) {
       const msg = "Backend is not ready. Please wait and try again.";
       console.warn(msg);
@@ -654,7 +624,6 @@ export default function Dashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": API_KEY,
         },
         body: JSON.stringify(config),
       });
@@ -693,8 +662,7 @@ export default function Dashboard() {
       const runId = data.run_id;
       (async function immediateRunSync(id: string) {
         try {
-          const headers = { "X-API-Key": API_KEY };
-          const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+          const runsRes = await fetch(`${API_URL}/training/runs`);
           if (runsRes.ok) {
             const runsJson = await runsRes.json();
             setRuns(runsJson);
@@ -747,11 +715,10 @@ export default function Dashboard() {
       }, watchdogMs);
 
       (async function pollRunUntilRunning(id: string) {
-        const headers = { "X-API-Key": API_KEY };
         const deadline = Date.now() + watchdogMs;
         while (Date.now() < deadline) {
           try {
-            const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+            const runsRes = await fetch(`${API_URL}/training/runs`);
             if (runsRes.ok) {
               const runs = await runsRes.json();
               const found =
@@ -799,7 +766,7 @@ export default function Dashboard() {
 
   const handleAbortTraining = async () => {
     try {
-      const backendReady = await waitForBackend();
+      const backendReady = await waitForBackend(API_URL);
       if (!backendReady) {
         const msg = "Backend is not ready. Please wait and try again.";
         console.warn(msg);
@@ -808,7 +775,6 @@ export default function Dashboard() {
       }
       const res = await fetch(`${API_URL}/training/abort`, {
         method: "POST",
-        headers: { "X-API-Key": API_KEY },
       });
       if (!res.ok) throw new Error(await res.text());
       addLog({
@@ -817,8 +783,7 @@ export default function Dashboard() {
         type: "warn",
       });
       try {
-        const headers = { "X-API-Key": API_KEY };
-        const runsRes = await fetch(`${API_URL}/training/runs`, { headers });
+        const runsRes = await fetch(`${API_URL}/training/runs`);
         if (runsRes.ok) {
           const runsJson = await runsRes.json();
           setRuns(runsJson);

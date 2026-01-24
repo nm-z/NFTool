@@ -1,38 +1,46 @@
 """Configuration for the NFTool backend.
 
 This module handles environment variables, path discovery, and directory setup.
+Designed to work both in development (Docker/local) and production (Tauri bundled).
 """
 
 import os
 import sys
 from pathlib import Path
 
-# FREEZE FIX: Detect if we are running as a PyInstaller executable
-if getattr(sys, 'frozen', False):
-    # If frozen, use the folder where the .exe is located
-    # This ensures workspace data persists next to the executable
-    REPO_ROOT = os.path.dirname(sys.executable)
+# 1. Determine the Root Workspace
+# NFTOOL_WORKSPACE is set by Tauri's run_tauri.py sidecar launcher
+# pointing to AppData on Windows for writable storage
+WORKSPACE_OVERRIDE = os.environ.get("NFTOOL_WORKSPACE")
+
+if WORKSPACE_OVERRIDE:
+    # PRODUCTION: Write to %APPDATA%/com.nftool.app/ (passed from Rust)
+    BASE_DIR = Path(WORKSPACE_OVERRIDE)
 else:
-    # If running from source, use the parent of the 'src' directory
-    CURRENT_FILE = Path(__file__).resolve()
-    REPO_ROOT = str(CURRENT_FILE.parent.parent)
+    # DEVELOPMENT: Write to local repo folders
+    if getattr(sys, 'frozen', False):
+        # If frozen but no override, use exe directory
+        BASE_DIR = Path(os.path.dirname(sys.executable))
+    else:
+        # Running from source
+        BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Environment Overrides (Docker)
+# 2. Define Subdirectories
+WORKSPACE_DIR = str(BASE_DIR)
+LOGS_DIR = str(BASE_DIR / "logs")
+RESULTS_DIR = str(BASE_DIR / "runs" / "results")
+REPORTS_DIR = str(BASE_DIR / "runs" / "reports")
+DATASETS_DIR = str(BASE_DIR / "datasets")
 
-WORKSPACE_DIR = os.getenv("WORKSPACE_DIR", os.path.join(REPO_ROOT, "workspace"))
+# 3. Create directories immediately so other modules don't fail
+for path_str in [LOGS_DIR, RESULTS_DIR, REPORTS_DIR, DATASETS_DIR]:
+    os.makedirs(path_str, exist_ok=True)
+
+# 4. Database Path
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    f"sqlite:///{os.path.join(WORKSPACE_DIR, 'nftool_full.db')}",
+    f"sqlite:///{BASE_DIR / 'nftool.db'}",
 )
-API_KEY = os.getenv("API_KEY", "plyo")
 
-LOGS_DIR = os.path.join(WORKSPACE_DIR, "logs")
-RESULTS_DIR = os.path.join(WORKSPACE_DIR, "runs/results")
-REPORTS_DIR = os.path.join(WORKSPACE_DIR, "runs/reports")
-DATASETS_DIR = os.path.join(WORKSPACE_DIR, "datasets")
-
-# Ensure directories exist
-os.makedirs(LOGS_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
-os.makedirs(REPORTS_DIR, exist_ok=True)
-os.makedirs(DATASETS_DIR, exist_ok=True)
+# 5. No API Key - Tauri apps run locally without authentication
+API_KEY = None

@@ -480,27 +480,32 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-async def websocket_endpoint(websocket: WebSocket, api_key: str):
+async def websocket_endpoint(websocket: WebSocket, api_key: str | None):
     """WebSocket entrypoint for UI clients.
 
-    Accepts incoming websocket connections, performs API key subprotocol
-    validation, primes the client with persisted run state (metrics/logs/status),
+    Accepts incoming websocket connections. When api_key is None (Tauri mode),
+    skips authentication. Otherwise validates API key via subprotocol.
+    Primes the client with persisted run state (metrics/logs/status),
     and then proxies incoming messages (simple ping/pong).
     """
-    protocols = websocket.headers.get("Sec-WebSocket-Protocol", "").split(",")
-    client_api_key = next(
-        (
-            p.strip().replace("api-key-", "")
-            for p in protocols
-            if p.strip().startswith("api-key-")
-        ),
-        None,
-    )
-    if client_api_key != api_key:
-        await websocket.accept()
-        await websocket.send_text(json.dumps({"type": "error", "data": "Unauthorized"}))
-        await websocket.close(code=4003)
-        return
+    client_api_key = None
+
+    # Only validate API key if one is configured (Docker/dev mode)
+    if api_key is not None:
+        protocols = websocket.headers.get("Sec-WebSocket-Protocol", "").split(",")
+        client_api_key = next(
+            (
+                p.strip().replace("api-key-", "")
+                for p in protocols
+                if p.strip().startswith("api-key-")
+            ),
+            None,
+        )
+        if client_api_key != api_key:
+            await websocket.accept()
+            await websocket.send_text(json.dumps({"type": "error", "data": "Unauthorized"}))
+            await websocket.close(code=4003)
+            return
 
     await manager.connect(websocket, client_api_key)
     manager.set_loop(asyncio.get_event_loop())
