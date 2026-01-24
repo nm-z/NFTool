@@ -330,7 +330,7 @@ export function Inspector({
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${API_URL}/hardware/gpus`, {
+                              const res = await fetch(`${API_URL}/gpus`, {
                                 headers: { "X-API-Key": API_KEY },
                               });
                               if (!res.ok)

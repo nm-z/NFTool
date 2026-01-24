@@ -16,18 +16,24 @@ WORKSPACE_OVERRIDE = os.environ.get("NFTOOL_WORKSPACE")
 if WORKSPACE_OVERRIDE:
     # PRODUCTION: Write to %APPDATA%/com.nftool.app/ (passed from Rust)
     BASE_DIR = Path(WORKSPACE_OVERRIDE)
+    REPO_ROOT = BASE_DIR  # In production, everything is in the workspace
 else:
     # DEVELOPMENT: Write to local repo folders
     if getattr(sys, 'frozen', False):
         # If frozen but no override, use exe directory
         BASE_DIR = Path(os.path.dirname(sys.executable))
+        REPO_ROOT = BASE_DIR
     else:
         # Running from source
-        BASE_DIR = Path(__file__).resolve().parent.parent
+        # This file is at backend/src/config.py
+        # BASE_DIR is workspace/ for runtime artifacts
+        # REPO_ROOT is the actual repository root for data/
+        source_file = Path(__file__).resolve()  # backend/src/config.py
+        REPO_ROOT = source_file.parent.parent.parent  # Go up to repo root
+        BASE_DIR = REPO_ROOT / "workspace"  # Runtime artifacts in workspace/
 
 # 2. Define Subdirectories
 WORKSPACE_DIR = str(BASE_DIR)
-REPO_ROOT = str(BASE_DIR)  # Alias for backwards compatibility
 LOGS_DIR = str(BASE_DIR / "logs")
 RESULTS_DIR = str(BASE_DIR / "runs" / "results")
 REPORTS_DIR = str(BASE_DIR / "runs" / "reports")

@@ -1,7 +1,7 @@
 import { expect, Page, APIRequestContext } from "@playwright/test";
 
 export const DEFAULT_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
 export const DEFAULT_API_KEY =
   process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
 
@@ -46,7 +46,7 @@ export async function selectDatasets(
 }
 
 export async function fetchRuns(request: APIRequestContext) {
-  const res = await request.get(`${DEFAULT_API_URL}/api/v1/training/runs`, {
+  const res = await request.get(`${DEFAULT_API_URL}/training/runs`, {
     headers: DEFAULT_API_KEY ? { "X-API-Key": DEFAULT_API_KEY } : undefined,
   });
   if (!res.ok()) {
