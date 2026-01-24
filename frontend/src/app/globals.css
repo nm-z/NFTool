@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  /* Enable dark mode for native form controls (select dropdowns, etc.) */
+  color-scheme: dark;
+
   /* Font stacks (former @theme variables) */
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -147,4 +150,21 @@ h4 {
   color: hsl(var(--foreground-dim));
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+/* Native select/option dark theme styling */
+select {
+  color-scheme: dark;
+  background-color: hsl(var(--input));
+}
+
+select option {
+  background-color: hsl(240 6% 10%); /* zinc-900 */
+  color: hsl(0 0% 98%); /* zinc-50 */
+  padding: 8px;
+}
+
+select option:hover,
+select option:checked {
+  background-color: hsl(217.2 91.2% 59.8% / 0.2); /* primary with opacity */
 }
