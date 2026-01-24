@@ -66,6 +66,7 @@ jobs:
 
       - name: Build Python Sidecar (onefile for Tauri compatibility)
         working-directory: ./backend
+        shell: bash
         run: |
           pyinstaller --clean --noconfirm --onefile --name nftool-backend --distpath ../src-tauri/binaries \
             --collect-submodules torch \
