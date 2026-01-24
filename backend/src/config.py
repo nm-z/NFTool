@@ -27,6 +27,7 @@ else:
 
 # 2. Define Subdirectories
 WORKSPACE_DIR = str(BASE_DIR)
+REPO_ROOT = str(BASE_DIR)  # Alias for backwards compatibility
 LOGS_DIR = str(BASE_DIR / "logs")
 RESULTS_DIR = str(BASE_DIR / "runs" / "results")
 REPORTS_DIR = str(BASE_DIR / "runs" / "reports")

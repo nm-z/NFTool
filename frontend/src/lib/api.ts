@@ -6,11 +6,16 @@
  * - Development mode (uses localhost:8001)
  */
 
-// Check if we're running in Tauri
-const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
-
 let API_PORT: number | null = null;
 let BASE_URL_CACHE: string | null = null;
+
+/**
+ * Check if we're running in Tauri (must be called at runtime, not at module load)
+ */
+function isTauriEnvironment(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.__TAURI__ !== undefined;
+}
 
 /**
  * Get the backend base URL, fetching the port from Tauri if needed
@@ -22,7 +27,7 @@ export async function getBaseUrl(): Promise<string> {
   }
 
   // In Tauri mode, ask Rust for the port
-  if (isTauri) {
+  if (isTauriEnvironment()) {
     try {
       // @ts-ignore - Tauri globals
       const { invoke } = window.__TAURI__.tauri;
@@ -34,6 +39,7 @@ export async function getBaseUrl(): Promise<string> {
         if (port > 0) {
           API_PORT = port;
           BASE_URL_CACHE = `http://127.0.0.1:${port}`;
+          console.log("Tauri mode: Using dynamic port", port);
           return BASE_URL_CACHE;
         }
         // Wait 100ms before retry
@@ -49,6 +55,7 @@ export async function getBaseUrl(): Promise<string> {
 
   // Fallback to development URL
   BASE_URL_CACHE = "http://localhost:8001";
+  console.log("Dev mode: Using localhost:8001");
   return BASE_URL_CACHE;
 }
 
@@ -65,8 +72,9 @@ export async function getWsUrl(): Promise<string> {
  * Listens for the "backend-ready" event from Tauri
  */
 export function waitForBackendReady(): Promise<void> {
-  if (!isTauri) {
+  if (!isTauriEnvironment()) {
     // In dev mode, assume backend is ready
+    console.log("Dev mode: Backend assumed ready");
     return Promise.resolve();
   }
 
