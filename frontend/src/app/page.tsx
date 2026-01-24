@@ -105,43 +105,6 @@ export default function Dashboard() {
     setIsMounted(true);
   }, []);
 
-  // Global error suppression for known benign runtime errors that can break
-  // interactive flows in some environments (e.g., automated/headless).
-  // We specifically guard against intermittent "Element not found" exceptions
-  // which are non-actionable in the UI and were observed to disrupt clicks.
-  useEffect(() => {
-    const onError = (ev: ErrorEvent) => {
-      try {
-        const msg = ev?.message ?? "";
-        if (typeof msg === "string" && msg.includes("Element not found")) {
-          console.warn("Suppressed benign runtime error:", msg);
-          ev.preventDefault();
-        }
-      } catch {
-        // swallow any handler errors
-      }
-    };
-    const onRejection = (ev: PromiseRejectionEvent) => {
-      try {
-        const reason = ev?.reason;
-        const msg = typeof reason === "string" ? reason : reason?.message ?? "";
-        if (typeof msg === "string" && msg.includes("Element not found")) {
-          console.warn("Suppressed benign rejection:", msg);
-          ev.preventDefault();
-        }
-      } catch {
-        // swallow
-      }
-    };
-
-    window.addEventListener("error", onError);
-    window.addEventListener("unhandledrejection", onRejection);
-    return () => {
-      window.removeEventListener("error", onError);
-      window.removeEventListener("unhandledrejection", onRejection);
-    };
-  }, []);
-
   useEffect(() => {
     if (!isMounted) return;
     const fetchData = async () => {

@@ -23,7 +23,7 @@ from src.manager import websocket_endpoint
 from src.routers import datasets, hardware, training
 from src.services.queue_instance import job_queue
 
-__all__ = ["api_key_middleware", "ws_endpoint"]
+__all__ = ["request_logging_middleware", "ws_endpoint"]
 
 # Configure logging
 logging.basicConfig(
@@ -45,12 +45,6 @@ class _SuppressWebsocketDebug(logging.Filter):
         )
 
 
-# Ensure CORS headers are present on error responses.
-CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "*",
-    "Access-Control-Allow-Methods": "*",
-}
 # Forward warnings and uvicorn logs into the same handlers so errors land in api.log.
 logging.captureWarnings(True)
 _root_handlers = logging.getLogger().handlers
@@ -94,15 +88,19 @@ async def lifespan(_app: FastAPI):
             .all()
         )
         for run in stuck_runs:
-            prev_status = getattr(run, "status", "unknown")
-            # Cast to Any to satisfy static checkers before assigning runtime value.
-            typing_cast(Any, run).status = "failed"
-            run.logs.append(
+            prev_status = run.status
+            run.status = "failed"
+            # In SQLAlchemy, assigning a new list or using flag_modified is often
+            # necessary for JSON columns to detect changes if they are modified in-place.
+            # Here we append and then re-assign to ensure the session picks up the change.
+            new_logs = list(run.logs)
+            new_logs.append(
                 {
                     "time": datetime.now().strftime("%H:%M:%S"),
                     "msg": "Run marked as failed due to API restart.",
                 }
             )
+            run.logs = new_logs
             logger.warning(
                 "Run %s was stuck in '%s' status, marked as 'failed'.",
                 run.run_id,
@@ -132,7 +130,6 @@ app.add_middleware(
         "http://tauri.localhost", # WebKit/macOS Tauri Production
         "http://localhost:3000",  # Development
         "http://127.0.0.1:3000",  # Development (explicit IP)
-        "*",                       # Fallback for other dev scenarios
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -155,7 +152,6 @@ async def log_unhandled_errors(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error"},
-        headers=CORS_HEADERS,
     )
 
 
@@ -178,15 +174,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={"detail": sanitized},
-        headers=CORS_HEADERS,
     )
 
 
 @app.middleware("http")
-async def api_key_middleware(request: Request, call_next: Any) -> Any:
+async def request_logging_middleware(request: Request, call_next: Any) -> Any:
     """
-    Basic request logging and CORS header enforcement.
-    No API key validation - Tauri apps run locally without authentication.
+    Basic request logging for incoming HTTP requests.
+    API key enforcement is handled by per-route dependencies.
     """
     try:
         path = request.url.path or ""
@@ -200,11 +195,7 @@ async def api_key_middleware(request: Request, call_next: Any) -> Any:
         path,
     )
 
-    response = await call_next(request)
-    response.headers.setdefault("Access-Control-Allow-Origin", "*")
-    response.headers.setdefault("Access-Control-Allow-Headers", "*")
-    response.headers.setdefault("Access-Control-Allow-Methods", "*")
-    return response
+    return await call_next(request)
 
 
 app.include_router(training.router, prefix="/api/v1/training")
