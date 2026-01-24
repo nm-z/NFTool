@@ -1,9 +1,10 @@
 """SQLAlchemy ORM models for storing run metadata and model checkpoints."""
 
 from datetime import datetime
+from typing import List, Optional
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.database import Base
 
 
@@ -27,22 +28,42 @@ class Run(Base):
     """
 
     __tablename__ = "runs"
-    id = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     # Index on timestamp for efficient ordering by creation time
-    timestamp = mapped_column(DateTime, default=datetime.now, nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False, index=True)
     # e.g. PASS_7721
-    run_id = mapped_column(String, unique=True, index=True, nullable=False)
-    model_choice = mapped_column(String, nullable=False)
+    run_id: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    model_choice: Mapped[str] = mapped_column(String, nullable=False)
     # Index on status for efficient filtering of running/completed runs
-    status = mapped_column(String, nullable=False, index=True)  # running, completed, aborted, failed
-    progress = mapped_column(Integer, default=0, nullable=False)
-    current_trial = mapped_column(Integer, default=0, nullable=False)
-    best_r2 = mapped_column(Float, default=-1.0e9, nullable=False)
-    optuna_trials = mapped_column(Integer, nullable=False)
-    config = mapped_column(JSON, default=dict, nullable=False)
-    report_path = mapped_column(String, default="", nullable=False)
-    metrics_history = mapped_column(JSON, default=list, nullable=False)
-    logs = mapped_column(JSON, default=list, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, index=True)  # running, completed, aborted, failed
+    progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    current_trial: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    best_r2: Mapped[float] = mapped_column(Float, default=-1.0e9, nullable=False)
+    optuna_trials: Mapped[int] = mapped_column(Integer, nullable=False)
+    config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    report_path: Mapped[str] = mapped_column(String, default="", nullable=False)
+    metrics_history: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    logs: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+
+    checkpoints: Mapped[List["ModelCheckpoint"]] = relationship("ModelCheckpoint", back_populates="run")
+    log_entries: Mapped[List["LogEntry"]] = relationship("LogEntry", back_populates="run")
+    epoch_metrics: Mapped[List["EpochMetric"]] = relationship("EpochMetric", back_populates="run")
+    artifacts: Mapped[List["ModelArtifact"]] = relationship("ModelArtifact", back_populates="run")
+
+
+class LogEntry(Base):
+    """Structured log entry persisted for a run."""
+
+    __tablename__ = "log_entries"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("runs.id"), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    time: Mapped[str] = mapped_column(String, default="", nullable=False)
+    msg: Mapped[str] = mapped_column(String, nullable=False)
+    type: Mapped[str] = mapped_column(String, default="default", nullable=False)
+    epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    run: Mapped["Run"] = relationship("Run", back_populates="log_entries")
 
 
 class ModelCheckpoint(Base):
@@ -63,52 +84,47 @@ class ModelCheckpoint(Base):
     """
 
     __tablename__ = "checkpoints"
-    id = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     # Index on run_id for efficient checkpoint queries per run
-    run_id = mapped_column(Integer, ForeignKey("runs.id"), nullable=False, index=True)
-    timestamp = mapped_column(DateTime, default=datetime.now, nullable=False)
-    model_path = mapped_column(String, nullable=False)
-    scaler_path = mapped_column(String, nullable=False)
-    r2_score = mapped_column(Float, nullable=False)
-    epoch = mapped_column(Integer, nullable=False)
-    trial = mapped_column(Integer, nullable=False)
-    val_loss = mapped_column(Float, nullable=False)
-    mae = mapped_column(Float, nullable=False)
-    params = mapped_column(JSON, default=dict, nullable=False)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("runs.id"), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    model_path: Mapped[str] = mapped_column(String, nullable=False)
+    scaler_path: Mapped[str] = mapped_column(String, nullable=False)
+    r2_score: Mapped[float] = mapped_column(Float, nullable=False)
+    epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    trial: Mapped[int] = mapped_column(Integer, nullable=False)
+    val_loss: Mapped[float] = mapped_column(Float, nullable=False)
+    mae: Mapped[float] = mapped_column(Float, nullable=False)
+    params: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
-    run = relationship("Run", back_populates="checkpoints")
-
-
-Run.checkpoints = relationship("ModelCheckpoint", back_populates="run")
+    run: Mapped["Run"] = relationship("Run", back_populates="checkpoints")
 
 
 class EpochMetric(Base):
     """Per-epoch metric record for a run/trial."""
 
     __tablename__ = "epoch_metrics"
-    id = mapped_column(Integer, primary_key=True, index=True)
-    run_id = mapped_column(Integer, ForeignKey("runs.id"), nullable=False)
-    timestamp = mapped_column(DateTime, default=datetime.now, nullable=False)
-    trial = mapped_column(Integer, nullable=False)
-    epoch = mapped_column(Integer, nullable=False)
-    loss = mapped_column(Float, nullable=False)
-    r2 = mapped_column(Float, nullable=False)
-    mae = mapped_column(Float, nullable=False)
-    val_loss = mapped_column(Float, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("runs.id"), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    trial: Mapped[int] = mapped_column(Integer, nullable=False)
+    epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    loss: Mapped[float] = mapped_column(Float, nullable=False)
+    r2: Mapped[float] = mapped_column(Float, nullable=False)
+    mae: Mapped[float] = mapped_column(Float, nullable=False)
+    val_loss: Mapped[float] = mapped_column(Float, nullable=False)
+
+    run: Mapped["Run"] = relationship("Run", back_populates="epoch_metrics")
 
 
 class ModelArtifact(Base):
     """Filesystem artifacts produced during a run."""
 
     __tablename__ = "model_artifacts"
-    id = mapped_column(Integer, primary_key=True, index=True)
-    run_id = mapped_column(Integer, ForeignKey("runs.id"), nullable=False)
-    timestamp = mapped_column(DateTime, default=datetime.now, nullable=False)
-    kind = mapped_column(String, nullable=False)
-    path = mapped_column(String, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("runs.id"), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    path: Mapped[str] = mapped_column(String, nullable=False)
 
-
-Run.epoch_metrics = relationship("EpochMetric", back_populates="run")
-Run.artifacts = relationship("ModelArtifact", back_populates="run")
-EpochMetric.run = relationship("Run", back_populates="epoch_metrics")
-ModelArtifact.run = relationship("Run", back_populates="artifacts")
+    run: Mapped["Run"] = relationship("Run", back_populates="artifacts")

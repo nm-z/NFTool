@@ -6,7 +6,6 @@
  * - Development mode (uses localhost:8001)
  */
 
-let API_PORT: number | null = null;
 let BASE_URL_CACHE: string | null = null;
 
 /**
@@ -36,8 +35,7 @@ export async function getBaseUrl(): Promise<string> {
       while (retries > 0) {
         const port = await invoke<number>("get_api_port");
         if (port > 0) {
-          API_PORT = port;
-          BASE_URL_CACHE = `http://127.0.0.1:${port}`;
+          BASE_URL_CACHE = `http://127.0.0.1:${port}/api/v1`;
           console.log("Tauri mode: Using dynamic port", port);
           return BASE_URL_CACHE;
         }
@@ -53,8 +51,8 @@ export async function getBaseUrl(): Promise<string> {
   }
 
   // Fallback to development URL
-  BASE_URL_CACHE = "http://localhost:8001";
-  console.log("Dev mode: Using localhost:8001");
+  BASE_URL_CACHE = "http://localhost:8001/api/v1";
+  console.log("Dev mode: Using localhost:8001/api/v1");
   return BASE_URL_CACHE;
 }
 
@@ -63,7 +61,8 @@ export async function getBaseUrl(): Promise<string> {
  */
 export async function getWsUrl(): Promise<string> {
   const baseUrl = await getBaseUrl();
-  return baseUrl.replace("http://", "ws://");
+  // WebSockets are at /ws root, not /api/v1/ws
+  return baseUrl.replace("/api/v1", "").replace("http://", "ws://");
 }
 
 /**

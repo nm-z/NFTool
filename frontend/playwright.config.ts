@@ -8,10 +8,20 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "line",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://127.0.0.1:3000",
     trace: "on-first-retry",
   },
   projects: [
+    {
+      name: "ui-only",
+      testMatch: /ui\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "workflow",
+      testMatch: /(workflows|sanity|smoke)\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
@@ -19,10 +29,10 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run dev",
-    url: "http://localhost:3000",
+    url: "http://127.0.0.1:3000",
     reuseExistingServer: true,
     env: {
-      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001",
+      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001",
       NEXT_PUBLIC_API_KEY: process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key",
     },
   },

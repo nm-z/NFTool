@@ -7,7 +7,6 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
-from typing import cast as typing_cast
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.encoders import jsonable_encoder
@@ -15,15 +14,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from src.auth import verify_api_key
 from src.config import LOGS_DIR, REPORTS_DIR, RESULTS_DIR
 from src.database.database import SESSION_LOCAL, Base, engine
-from src.database.models import Run
+from src.database.models import LogEntry, Run
 from src.manager import manager as connection_manager
 from src.manager import websocket_endpoint
 from src.routers import datasets, hardware, training
 from src.services.queue_instance import job_queue
 
-__all__ = ["request_logging_middleware", "ws_endpoint"]
+__all__ = ["request_logging_middleware", "verify_api_key", "ws_endpoint"]
 
 # Configure logging
 logging.basicConfig(
@@ -75,10 +75,9 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(_app: FastAPI):
     """Context manager for managing the lifespan of the FastAPI application."""
     # Startup actions
-    _hardware_monitor_task = asyncio.create_task(
+    _app.state.hardware_monitor_task = asyncio.create_task(
         connection_manager.hardware_monitor_task()
     )
-    del _hardware_monitor_task  # Explicitly delete to mark as "used" for linters
 
     # State Recovery: Mark any stuck 'running'/'queued' jobs as 'failed'
     with SESSION_LOCAL() as db:
@@ -90,31 +89,35 @@ async def lifespan(_app: FastAPI):
         for run in stuck_runs:
             prev_status = run.status
             run.status = "failed"
-            # In SQLAlchemy, assigning a new list or using flag_modified is often
-            # necessary for JSON columns to detect changes if they are modified in-place.
-            # Here we append and then re-assign to ensure the session picks up the change.
-            new_logs = list(run.logs)
-            new_logs.append(
-                {
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "msg": "Run marked as failed due to API restart.",
-                }
+            db.add(
+                LogEntry(
+                    run_id=run.id,
+                    timestamp=datetime.now(),
+                    time=datetime.now().strftime("%H:%M:%S"),
+                    msg="Run marked as failed due to API restart.",
+                    type="default",
+                    epoch=None,
+                )
             )
-            run.logs = new_logs
             logger.warning(
                 "Run %s was stuck in '%s' status, marked as 'failed'.",
                 run.run_id,
                 prev_status,
             )
         db.commit()
-    _job_queue_task = asyncio.create_task(job_queue.process_queue())
-    del _job_queue_task  # Explicitly delete to mark as "used" for linters
+    _app.state.job_queue_task = asyncio.create_task(job_queue.process_queue())
 
     try:
         yield
     finally:
-        # Shutdown logic (if any) can be placed here.
-        pass
+        tasks: list[asyncio.Task[Any]] = []
+        for name in ("hardware_monitor_task", "job_queue_task"):
+            task = getattr(_app.state, name, None)
+            if task:
+                task.cancel()
+                tasks.append(task)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(title="NFTool API", lifespan=lifespan)
@@ -158,22 +161,18 @@ async def log_unhandled_errors(request: Request, exc: Exception):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Return a JSON-serializable 422 response for validation errors."""
-    sanitized: list[dict[str, Any]] = []
-    for err in exc.errors():
-        if isinstance(err, dict):
-            err_dict = typing_cast(dict[str, Any], err)
-            cleaned = {str(k): v for k, v in err_dict.items()}
-            if "input" in cleaned:
-                try:
-                    jsonable_encoder(cleaned["input"])
-                except Exception:
-                    cleaned["input"] = str(cleaned["input"])
-            sanitized.append(cleaned)
-        else:
-            sanitized.append({"msg": str(err)})
+    def _sanitize(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {str(k): _sanitize(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_sanitize(i) for i in obj]
+        if isinstance(obj, (str, int, float, bool, type(None))):
+            return obj
+        return str(obj)
+
     return JSONResponse(
         status_code=422,
-        content={"detail": sanitized},
+        content={"detail": _sanitize(exc.errors())},
     )
 
 

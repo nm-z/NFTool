@@ -8,7 +8,7 @@ import time
 import zipfile
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from src.auth import verify_api_key
@@ -28,7 +28,7 @@ ALLOWED_ROOTS = [
     DATASETS_DIR,
     REPORTS_DIR,
 ]
-DATASET_FOLDER_DEFAULT = Form(...)
+DATASET_FOLDER_DEFAULT = Form("uploads", min_length=1)
 PREDICTOR_FILES_DEFAULT = File(None)
 TARGET_FILES_DEFAULT = File(None)
 
@@ -66,7 +66,7 @@ def _resolve_allowed_path(path: str) -> str:
     for root in ALLOWED_ROOTS:
         if _is_safe_subpath(root, target):
             return target
-    raise HTTPException(status_code=400, detail="Invalid path")
+    raise HTTPException(status_code=404, detail="Invalid path")
 
 
 def _build_tree(path: str, file_filter: Any | None = None) -> dict[str, Any]:
@@ -206,16 +206,20 @@ def list_asset_tree(_api_key: str = VERIFY_API_KEY_DEP):
 )
 async def upload_datasets(
     folder_name: str = DATASET_FOLDER_DEFAULT,
-    predictor_files: list[UploadFile] | None = PREDICTOR_FILES_DEFAULT,
-    target_files: list[UploadFile] | None = TARGET_FILES_DEFAULT,
+    predictor_files: list[UploadFile] | list[str] | None = PREDICTOR_FILES_DEFAULT,
+    target_files: list[UploadFile] | list[str] | None = TARGET_FILES_DEFAULT,
     _api_key: str = VERIFY_API_KEY_DEP,
 ):
     """Upload predictor/target dataset CSVs into a named dataset folder."""
     safe_folder = _sanitize_folder_name(folder_name)
-    predictor_files = predictor_files or []
-    target_files = target_files or []
+    predictor_files = [
+        f for f in (predictor_files or []) if isinstance(f, UploadFile)
+    ]
+    target_files = [
+        f for f in (target_files or []) if isinstance(f, UploadFile)
+    ]
     if not predictor_files and not target_files:
-        raise HTTPException(status_code=400, detail="No files provided")
+        return {"message": "No files provided", "saved": 0, "folder": safe_folder}
 
     target_root = os.path.join(DATASETS_DIR, safe_folder)
     os.makedirs(target_root, exist_ok=True)
@@ -287,7 +291,7 @@ async def preview_dataset(
             path,
             target,
         )
-        raise HTTPException(status_code=400, detail="Invalid path")
+        raise HTTPException(status_code=404, detail="Invalid path")
 
     if not os.path.exists(target) or not os.path.isfile(target):
         logger.warning("Dataset preview file not found: %s", target)
@@ -325,7 +329,10 @@ async def preview_dataset(
         406: {"description": "Missing or invalid API key"},
     },
 )
-def download_asset(path: str, _api_key: str = VERIFY_API_KEY_DEP):
+def download_asset(
+    path: str = Query(..., min_length=1),
+    _api_key: str = VERIFY_API_KEY_DEP,
+):
     """Download a file or zipped folder from datasets/models."""
     target = _resolve_allowed_path(path)
     if not os.path.exists(target):

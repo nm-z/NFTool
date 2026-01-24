@@ -1,34 +1,14 @@
 import React, { useState } from "react";
 import { FastForward, Check, AlertCircle, HardDrive } from "lucide-react";
 import { useTrainingStore } from "@/store/useTrainingStore";
-
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-const API_URL = `${API_ROOT}/api/v1`;
-
-type EvalComparison = {
-  index: number;
-  actual: number;
-  predicted: number;
-  abs_error: number;
-  percent_error: number;
-};
-
-type EvalResult = {
-  run_id: string;
-  accuracy_percent: number;
-  mape_percent: number;
-  r2_score: number;
-  mae: number;
-  rmse: number;
-  count: number;
-  comparisons: EvalComparison[];
-};
+import { useApi } from "@/components/ApiProvider";
 
 export function InferencePlayground({
   loadedPath,
 }: {
   loadedPath: string | null;
 }) {
+  const { apiUrl: API_URL } = useApi();
   const { isAdvancedMode, setLoadedModelPath, runs } = useTrainingStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

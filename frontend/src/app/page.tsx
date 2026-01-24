@@ -21,9 +21,11 @@ import { Inspector } from "@/components/inspector/Inspector";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
 const waitForBackend = async (apiUrl: string, attempts = 5, delayMs = 1000) => {
+  // health is at root, not under /api/v1
+  const rootUrl = apiUrl.replace(/\/api\/v1\/?$/, "");
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const res = await fetch(`${apiUrl}/health`);
+      const res = await fetch(`${rootUrl}/health`);
       if (res.ok) return true;
     } catch {
       // Swallow network errors; we'll retry below.
@@ -36,7 +38,7 @@ const waitForBackend = async (apiUrl: string, attempts = 5, delayMs = 1000) => {
 export default function Dashboard() {
   // Get dynamic API URLs from context (configured for both dev and Tauri)
   const { apiUrl: API_URL, wsUrl: WS_URL_BASE } = useApi();
-  const WS_URL = WS_URL_BASE;
+  const WS_URL = WS_URL_BASE; // WebSockets are handled at root, and getWsUrl already handles this
   const {
     activeWorkspace,
     setActiveWorkspace,
@@ -201,7 +203,7 @@ export default function Dashboard() {
       }
 
       try {
-        const gpuRes = await fetch(`${API_URL}/gpus`);
+        const gpuRes = await fetch(`${API_URL}/hardware/gpus`);
         if (gpuRes.ok) setGpuList(await gpuRes.json());
       } catch (e) {
         console.warn("GPU fetch error:", e);
@@ -440,7 +442,7 @@ export default function Dashboard() {
         intervalId = null;
       }
     };
-  }, [isMounted, wsStatus, isStarting, setRuns, setIsRunning, setIsStarting, setIsAborting, setTrialInfo]);
+  }, [isMounted, wsStatus, isStarting, setRuns, setIsRunning, setIsStarting, setIsAborting, setTrialInfo, API_URL]);
 
   const parseRange = (val: string): [number, number] => {
     const parts = val.split("→").map((part) => part.trim());

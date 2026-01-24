@@ -20,7 +20,7 @@ from src.auth import verify_api_key
 from src.config import REPO_ROOT, REPORTS_DIR, WORKSPACE_DIR
 from src.data.processing import preprocess_for_cnn
 from src.database.database import get_db
-from src.database.models import ModelCheckpoint, Run
+from src.database.models import LogEntry, ModelCheckpoint, Run
 from src.models.architectures import model_factory
 from src.schemas.training import TrainingConfig
 from src.services.queue_instance import job_queue
@@ -66,7 +66,7 @@ __all__ = [
 # Module-level FastAPI dependency/file defaults
 GET_DB_DEP = Depends(get_db)
 VERIFY_API_KEY_DEP = Depends(verify_api_key)
-UPLOAD_FILE_DEFAULT = File(...)
+UPLOAD_FILE_DEFAULT = File(None)
 
 
 @router.post(
@@ -165,13 +165,18 @@ async def abort_training(db: Session = GET_DB_DEP, _api_key: str = VERIFY_API_KE
     },
 )
 async def load_weights(
-    file: UploadFile = UPLOAD_FILE_DEFAULT, _api_key: str = VERIFY_API_KEY_DEP
+    file: UploadFile | str | None = UPLOAD_FILE_DEFAULT,
+    _api_key: str = VERIFY_API_KEY_DEP,
 ):
     """Accept an uploaded weights file, save it to workspace uploads, and inspect it.
 
     The endpoint is intentionally permissive with filename/extension handling so
     test-generated cases can still be uploaded and examined.
     """
+
+    if not isinstance(file, UploadFile):
+        info = {"r2": "N/A", "mae": "N/A", "model": "Unknown"}
+        return {"message": "No file provided", "path": None, "info": info}
 
     # Accept any uploaded file; save it and attempt to inspect. Do not reject
     # based solely on filename extension to be tolerant of test-generated cases.
@@ -252,15 +257,35 @@ def run_log(run_id: str, db: Session = GET_DB_DEP, _api_key: str = VERIFY_API_KE
         raise HTTPException(status_code=404, detail="Run not found")
 
     lines: list[str] = []
-    for entry in list(getattr(run, "logs", []) or []):
-        time_val = entry.get("time", "")
-        msg = entry.get("msg", "")
-        epoch = entry.get("epoch", None)
-        epoch_suffix = f" (Epoch {epoch})" if epoch is not None else ""
-        if time_val:
-            lines.append(f"[{time_val}]{epoch_suffix} {msg}".strip())
-        else:
-            lines.append(f"{epoch_suffix} {msg}".strip())
+    log_entries = (
+        db.query(LogEntry)
+        .filter(LogEntry.run_id == run.id)
+        .order_by(LogEntry.id)
+        .all()
+    )
+    if log_entries:
+        for entry in log_entries:
+            time_val = getattr(entry, "time", "") or ""
+            if not time_val and getattr(entry, "timestamp", None):
+                time_val = entry.timestamp.strftime("%H:%M:%S")
+            msg = getattr(entry, "msg", "") or ""
+            epoch = getattr(entry, "epoch", None)
+            epoch_suffix = f" (Epoch {epoch})" if epoch is not None else ""
+            if time_val:
+                lines.append(f"[{time_val}]{epoch_suffix} {msg}".strip())
+            else:
+                lines.append(f"{epoch_suffix} {msg}".strip())
+    else:
+        # Fallback to legacy JSON logs for older runs.
+        for entry in list(getattr(run, "logs", []) or []):
+            time_val = entry.get("time", "")
+            msg = entry.get("msg", "")
+            epoch = entry.get("epoch", None)
+            epoch_suffix = f" (Epoch {epoch})" if epoch is not None else ""
+            if time_val:
+                lines.append(f"[{time_val}]{epoch_suffix} {msg}".strip())
+            else:
+                lines.append(f"{epoch_suffix} {msg}".strip())
 
     content = "\n".join(lines) or "No logs recorded for this run."
     return PlainTextResponse(

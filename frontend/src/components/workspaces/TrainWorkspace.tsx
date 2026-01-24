@@ -1,3 +1,5 @@
+'use client';
+
 import React from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import archy from "archy";
@@ -29,6 +31,19 @@ import { SummaryCard } from "../common/Cards";
 import { TabTrigger } from "../common/UIComponents";
 import { InferencePlayground } from "./tools/InferencePlayground";
 import { useTrainingStore } from "@/store/useTrainingStore";
+
+type ArchyNode = { label: string; nodes?: Array<ArchyNode | string> };
+
+type MetricPoint = {
+  trial?: number;
+  epoch?: number;
+  r2?: number;
+  val_loss?: number;
+  mae?: number;
+  [key: string]: unknown;
+};
+
+type TrialPoint = { point: MetricPoint; index: number };
 
 export function TrainWorkspace() {
   const {
@@ -307,11 +322,7 @@ export function TrainWorkspace() {
     return map;
   }, [logs]);
 
-  const archyText = React.useMemo(() => {
-    type ArchyNode = { label: string; nodes?: Array<ArchyNode | string> };
-
-    type MetricPoint = (typeof metricsHistory)[number];
-    type TrialPoint = { point: MetricPoint; index: number };
+  const archyText = (() => {
     const trialGroups = new Map<number, TrialPoint[]>();
     (metricsHistory ?? []).forEach((point, index) => {
       const trialNum = typeof point.trial === "number" ? point.trial + 1 : 1;
@@ -332,7 +343,7 @@ export function TrainWorkspace() {
           }
         });
 
-        let allEpochEntries = Array.from(epochMap.entries()).sort(([a], [b]) => a - b);
+        const allEpochEntries = Array.from(epochMap.entries()).sort(([a], [b]) => a - b);
 
         // Show last 5 epochs if folded, otherwise show all
         const displayEpochEntries = epochFolded
@@ -424,7 +435,7 @@ export function TrainWorkspace() {
     } catch {
       return "";
     }
-  }, [activeRun, logs, metricsHistory, seed, split, trialParamLogs, trialSummaryLogs, epochFolded]);
+  })();
 
 
   return (

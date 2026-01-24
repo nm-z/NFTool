@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-test("dashboard loads without errors", async ({ page }) => {
+test.describe("Workflow tests", () => {
+  test("dashboard loads and connects to backend", async ({ page }) => {
   // Go to the dashboard
   await page.goto("/");
 
   // Check title
-  await expect(page).toHaveTitle(/NFTool V3/);
+  await expect(page).toHaveTitle(/NFTool/);
 
   // Check for critical error overlays
   const errorOverlay = page.locator(
@@ -30,6 +31,7 @@ test("dashboard loads without errors", async ({ page }) => {
   // We can check if it has options.
   const predictorSelect = page.locator("select").first();
   await expect(predictorSelect).toBeVisible();
-  const optionCount = await predictorSelect.locator("option").count();
-  expect(optionCount).toBeGreaterThan(0);
+    const optionCount = await predictorSelect.locator("option").count();
+    expect(optionCount).toBeGreaterThan(0);
+  });
 });

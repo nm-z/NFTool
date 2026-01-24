@@ -33,11 +33,8 @@ import { TabTrigger } from "../common/UIComponents";
 import { SummaryCard } from "../common/Cards";
 import { useTrainingStore } from "@/store/useTrainingStore";
 import { DatasetPreview } from "./tools/DatasetPreview";
+import { useApi } from "../ApiProvider";
 
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-const API_BASE = API_ROOT.replace(/\/+$/, "").endsWith("/api/v1")
-  ? API_ROOT.replace(/\/+$/, "")
-  : `${API_ROOT.replace(/\/+$/, "")}/api/v1`;
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
 
 type RunRecord = {
@@ -88,6 +85,7 @@ type EvalResult = {
 };
 
 export function LibraryWorkspace() {
+  const { apiUrl: API_BASE } = useApi();
   const { runs, datasets } = useTrainingStore();
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null);
   const [assetRoots, setAssetRoots] = useState<AssetNode[]>([]);
@@ -504,6 +502,7 @@ function RunDetailView({
   run: RunRecord;
   onBack: () => void;
 }) {
+  const { apiUrl: API_BASE } = useApi();
   const { setLoadedModelPath, setActiveWorkspace, addLog } = useTrainingStore();
   const [evaluation, setEvaluation] = useState<EvalResult | null>(null);
   const [evaluationLoading, setEvaluationLoading] = useState(false);

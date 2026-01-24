@@ -7,15 +7,16 @@ import { InspectorSection, ControlInput, RangeControl } from "../common/Inputs";
 import { TabTrigger } from "../common/UIComponents";
 import { HardwarePanel } from "../common/Cards";
 import { useTrainingStore } from "@/store/useTrainingStore";
+import { useApi } from "../ApiProvider";
 
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export function Inspector({
   setError,
 }: {
   setError: (err: string | null) => void;
 }) {
+  const { apiUrl: API_URL } = useApi();
   // Config States from Store
   const {
     modelType,
@@ -329,7 +330,7 @@ export function Inspector({
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${API_URL}/gpus`, {
+                              const res = await fetch(`${API_URL}/hardware/gpus`, {
                                 headers: { "X-API-Key": API_KEY },
                               });
                               if (!res.ok)

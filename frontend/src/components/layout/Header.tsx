@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { IconButton } from "../common/UIComponents";
 import { WorkspaceType, useTrainingStore } from "@/store/useTrainingStore";
+import { useApi } from "../ApiProvider";
 
 interface HeaderProps {
   isRunning: boolean;
@@ -33,10 +34,10 @@ export function Header({
   handleResetTraining,
   setActiveWorkspace,
 }: HeaderProps) {
+  const { apiUrl: API_URL } = useApi();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addLog, setLoadedModelPath, runs, logs, metricsHistory } = useTrainingStore();
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
 
   // Derive canonical engine/run state from the runs list when available.
@@ -102,7 +103,7 @@ export function Header({
         msg: `Uploading weights: ${file.name}...`,
         type: "info",
       });
-      const res = await fetch(`${API_URL}/load-weights`, {
+      const res = await fetch(`${API_URL}/training/load-weights`, {
         method: "POST",
         headers: { "X-API-Key": API_KEY },
         body: formData,

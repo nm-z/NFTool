@@ -5,7 +5,7 @@ import importlib
 import logging
 import multiprocessing
 from collections import deque
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy.orm import Session
 from src.database.database import SESSION_LOCAL
@@ -50,9 +50,7 @@ class JobQueue:
             try:
                 run = db.query(Run).filter(Run.run_id == run_id).first()
                 if run:
-                    # Cast to Any to satisfy static type checkers for mapped ORM
-                    # attributes on ORM result objects.
-                    cast(Any, run).status = "queued"
+                    run.status = "queued"
                     db.commit()
                     # db.close()
             finally:
@@ -114,7 +112,7 @@ class JobQueue:
             try:
                 run = db.query(Run).filter(Run.run_id == run_id).first()
                 if run:
-                    cast(Any, run).status = "running"
+                    run.status = "running"
                     db.commit()
             finally:
                 db.close()
@@ -181,17 +179,17 @@ class JobQueue:
         db = SESSION_LOCAL()
         try:
             run = db.query(Run).filter(Run.run_id == finished_run_id).first()
-            if run and cast(Any, run).status == "running":
+            if run and run.status == "running":
                 finished_proc = self.active_process
                 exitcode = getattr(finished_proc, "exitcode", None)
-                cast(Any, run).status = "completed" if exitcode == 0 else "failed"
+                run.status = "completed" if exitcode == 0 else "failed"
                 db.commit()
                 if finished_run_id is not None:
                     # Dynamically obtain the manager singleton for broadcasting.
                     connection_manager = importlib.import_module("src.manager").manager
                     message = (
                         f"Job finished with exit code {exitcode}. "
-                        f"Status: {cast(Any, run).status}"
+                        f"Status: {run.status}"
                     )
 
                     db_log_and_broadcast(
@@ -234,7 +232,7 @@ class JobQueue:
             self.active_process.join()
             run = db.query(Run).filter(Run.run_id == run_id).first()
             if run:
-                cast(Any, run).status = "aborted"
+                run.status = "aborted"
                 db.commit()
             # Dynamically obtain manager and TelemetryMessage to avoid import cycles.
             connection_manager = importlib.import_module("src.manager").manager
@@ -271,7 +269,7 @@ class JobQueue:
                     canceled.append(run_id)
                     run = db.query(Run).filter(Run.run_id == run_id).first()
                     if run:
-                        cast(Any, run).status = "aborted"
+                        run.status = "aborted"
                         db.commit()
             connection_manager = importlib.import_module("src.manager").manager
             telemetry_message_cls = importlib.import_module(

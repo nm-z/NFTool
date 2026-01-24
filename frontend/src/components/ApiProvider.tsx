@@ -34,11 +34,11 @@ export function ApiProvider({ children }: { children: React.ReactNode }) {
         const baseUrl = await getBaseUrl();
         const wsBaseUrl = await getWsUrl();
 
-        setApiUrl(`${baseUrl}/api/v1`);
+        setApiUrl(baseUrl);
         setWsUrl(wsBaseUrl);
         setIsReady(true);
 
-        console.log("API Provider initialized:", { apiUrl: `${baseUrl}/api/v1`, wsUrl: wsBaseUrl });
+        console.log("API Provider initialized:", { apiUrl: baseUrl, wsUrl: wsBaseUrl });
       } catch (e) {
         console.error("Failed to initialize API provider:", e);
         // Fallback to defaults

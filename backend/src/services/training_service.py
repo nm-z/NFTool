@@ -12,10 +12,11 @@ from datetime import datetime
 from typing import Any, Protocol
 
 import torch
+from sqlalchemy.orm import Session
 from src.config import REPORTS_DIR, RESULTS_DIR
 from src.data.processing import load_dataset, preprocess_for_cnn
 from src.database.database import SESSION_LOCAL
-from src.database.models import EpochMetric, ModelArtifact, ModelCheckpoint, Run
+from src.database.models import EpochMetric, LogEntry, ModelArtifact, ModelCheckpoint, Run
 from src.manager import manager as connection_manager_instance
 from src.models import architectures as architectures_module
 from src.schemas.training import TrainingConfig
@@ -44,13 +45,13 @@ class ConnectionManager(Protocol):
         """Broadcast a message to all connected clients."""
 
 
-def _send_metrics_sync(conn_mgr: Any, metric: dict[str, Any]):
+def _send_metrics_sync(conn_mgr: ConnectionManager, metric: dict[str, Any]):
     """Send a structured metrics TelemetryMessage synchronously."""
     tm = TelemetryMessage(type="metrics", data=MetricData(**metric))
     conn_mgr.broadcast_sync(tm)
 
 
-def _send_status_sync(conn_mgr: Any, status_data: dict[str, Any]):
+def _send_status_sync(conn_mgr: ConnectionManager, status_data: dict[str, Any]):
     """Send a structured status TelemetryMessage synchronously."""
     try:
         q_status = queue_instance_module.job_queue.get_status()
@@ -69,14 +70,14 @@ def _send_status_sync(conn_mgr: Any, status_data: dict[str, Any]):
 
 
 def _prepare_data(
-    db: Any,
-    run: Any,
+    db: Session,
+    run: Run,
     predictor_path: str,
     target_path: str,
     config: TrainingConfig,
     run_dir: str,
     run_id: str,
-    conn_mgr: Any,
+    conn_mgr: ConnectionManager,
 ) -> tuple[
     Any, Any, Any,
     Any, Any, Any,
@@ -232,17 +233,21 @@ def run_training_task(
             hist = list(getattr(run, "metrics_history", []) or [])
             hist.append(metric_point)
             run_any.metrics_history = hist
-            logs = list(getattr(run, "logs", []) or [])
-            logs.append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "msg": (
-                    f"Trial {cur_trial + 1}/{config.optuna_trials} "
-                    f"Epoch {epoch}/{n_eps}: "
-                    f"v_loss={v_loss:.6f}, r2={r2:.4f}, mae={mae:.4f}"
-                ),
-                "type": "info", "epoch": epoch,
-            })
-            run_any.logs = logs
+            log_time = datetime.now().strftime("%H:%M:%S")
+            db.add(
+                LogEntry(
+                    run_id=run.id,
+                    timestamp=datetime.now(),
+                    time=log_time,
+                    msg=(
+                        f"Trial {cur_trial + 1}/{config.optuna_trials} "
+                        f"Epoch {epoch}/{n_eps}: "
+                        f"v_loss={v_loss:.6f}, r2={r2:.4f}, mae={mae:.4f}"
+                    ),
+                    type="info",
+                    epoch=epoch,
+                )
+            )
             db.add(EpochMetric(
                 run_id=run.id,
                 trial=cur_trial,
@@ -312,9 +317,9 @@ def run_training_task(
 
 
 def _save_checkpoint(
-    db: Any, run: Any, run_dir: str, trial_num: int, model: Any,
+    db: Session, run: Run, run_dir: str, trial_num: int, model: Any,
     loss: float, r2: float, mae: float, epoch: int, sx_p: str, sy_p: str,
-    conn_mgr: Any, run_id: str, config: Any,
+    conn_mgr: ConnectionManager, run_id: str, config: TrainingConfig,
 ) -> None:
     """Persist a trial checkpoint and update DB history."""
     checkpoint_path = os.path.join(run_dir, f"best_model_trial_{trial_num}.pt")
@@ -373,9 +378,9 @@ def _save_checkpoint(
 
 
 def _finalize_run(
-    db: Any, run: Any, run_dir: str, study: Any, device: Any,
+    db: Session, run: Run, run_dir: str, study: Any, device: Any,
     x_test: Any, y_test: Any, scaler_y: Any,
-    conn_mgr: Any, run_id: str, config: Any,
+    conn_mgr: ConnectionManager, run_id: str, config: TrainingConfig,
 ) -> None:
     """Generate final reports, plots, and set run status."""
     db_log_and_broadcast(db, run_id, "Generating final reports...", conn_mgr, "info")
@@ -466,7 +471,7 @@ def _finalize_run(
 
 
 def _make_tracked_objective(
-    db: Any, run: Any, run_id: str, conn_mgr: Any, config: TrainingConfig,
+    db: Session, run: Run, run_id: str, conn_mgr: ConnectionManager, config: TrainingConfig,
     x_train: Any, y_train: Any, x_val: Any, y_val: Any,
     device: Any, patience: int, params: dict[str, Any], on_checkpoint: Any,
 ) -> Objective:

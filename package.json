@@ -7,7 +7,9 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "frontend:build": "cd frontend && npm run build",
-    "backend:build": "cd backend && pyinstaller --noconfirm --onedir --console --name nftool-backend --clean run_tauri.py"
+    "backend:build": "cd backend && pyinstaller --noconfirm --onefile --console --name nftool-backend --clean --collect-submodules torch --collect-submodules scipy --collect-submodules sklearn --collect-data plotly --collect-data kaleido run_tauri.py",
+    "test:backend": "cd backend && .venv/bin/python -m pytest tests",
+    "test:e2e": "export NEXT_PUBLIC_API_URL=http://127.0.0.1:8001 && export NEXT_PUBLIC_API_KEY=nftool-dev-key && (fuser -k 8001/tcp || true) && (cd backend && export PYTHONPATH=$PYTHONPATH:. && .venv/bin/python src/api.py &) && (cd frontend && npx playwright install chromium) && sleep 5 && (cd frontend && npx playwright test)"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.6"

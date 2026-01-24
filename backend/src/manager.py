@@ -16,8 +16,9 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from src.database.database import SESSION_LOCAL
-from src.database.models import ModelCheckpoint, Run
+from src.database.models import LogEntry, ModelCheckpoint, Run
 from src.schemas.websocket import (
     HardwareStats,
     LogMessage,
@@ -49,7 +50,7 @@ class ConnectionManager:
         # Consolidate tracking maps to reduce instance attribute count.
         self._tracking: dict[str, Any] = {
             "metrics_index": {},
-            "logs_index": {},
+            "log_id": {},
             "status": {},
             "checkpoint_id": {},
         }
@@ -182,7 +183,7 @@ class ConnectionManager:
             "result": {"best_r2": float(getattr(run, "best_r2", 0.0) or 0.0)},
         }
 
-    async def _forward_checkpoints(self, db: Any, run: Run) -> None:
+    async def _forward_checkpoints(self, db: Session, run: Run) -> None:
         """Query ModelCheckpoint rows for a run and broadcast them as metric points.
         
         Optimized to only fetch checkpoints newer than the last forwarded one.
@@ -252,14 +253,24 @@ class ConnectionManager:
         if self.active_run_id:
             self._tracking["metrics_index"][self.active_run_id] = len(metrics)
 
-    async def _broadcast_logs(self, logs: list[dict[str, Any]]) -> None:
-        """Broadcast a list of persisted log dicts, skipping already-sent items."""
-        if not logs:
+    async def _broadcast_log_entries(self, entries: list[LogEntry]) -> None:
+        """Broadcast newly persisted log entries, skipping already-sent items."""
+        if not entries:
             return
-        last_l = self._tracking["logs_index"].get(self.active_run_id, 0)
-        for lg in logs[last_l:]:
+        for entry in entries:
             try:
-                l_tm = TelemetryMessage(type="log", data=LogMessage(**lg))
+                time_val = getattr(entry, "time", None) or ""
+                if not time_val and getattr(entry, "timestamp", None):
+                    time_val = entry.timestamp.strftime("%H:%M:%S")
+                l_tm = TelemetryMessage(
+                    type="log",
+                    data=LogMessage(
+                        time=time_val,
+                        msg=getattr(entry, "msg", None) or "",
+                        type=getattr(entry, "type", None) or "default",
+                        epoch=getattr(entry, "epoch", None),
+                    ),
+                )
                 await self.broadcast(l_tm)
             except (
                 ValueError,
@@ -269,8 +280,8 @@ class ConnectionManager:
                 RuntimeError,
             ) as exc:
                 logger.exception("Failed to forward log entry: %s", exc)
-        if self.active_run_id:
-            self._tracking["logs_index"][self.active_run_id] = len(logs)
+        if self.active_run_id and entries[-1].id is not None:
+            self._tracking["log_id"][self.active_run_id] = int(entries[-1].id)
 
     async def hardware_monitor_task(self):
         """Background task: poll hardware and DB for updates and forward them.
@@ -324,8 +335,14 @@ class ConnectionManager:
                     await self._broadcast_metrics(metrics)
 
                     # Forward new log entries
-                    logs = list(getattr(run, "logs", []) or [])
-                    await self._broadcast_logs(logs)
+                    last_log_id = self._tracking["log_id"].get(self.active_run_id, 0)
+                    log_entries = (
+                        db.query(LogEntry)
+                        .filter(LogEntry.run_id == run.id, LogEntry.id > last_log_id)
+                        .order_by(LogEntry.id)
+                        .all()
+                    )
+                    await self._broadcast_log_entries(log_entries)
 
                     # Forward status updates (progress, current_trial, status, best_r2)
                     # Build status snapshot with defensively-extracted totals.
@@ -474,11 +491,11 @@ class ConnectionManager:
             return
         self._tracking.setdefault("metrics_index", {})[run_id] = int(index or 0)
 
-    def set_logs_index(self, run_id: str, index: int) -> None:
-        """Set the persisted logs index for a run (thread-safe-ish helper)."""
+    def set_last_log_id(self, run_id: str, last_id: int) -> None:
+        """Set the last forwarded log entry id for a run."""
         if not run_id:
             return
-        self._tracking.setdefault("logs_index", {})[run_id] = int(index or 0)
+        self._tracking.setdefault("log_id", {})[run_id] = int(last_id or 0)
 
 
 manager = ConnectionManager()
@@ -546,7 +563,12 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str | None):
                 run_id = getattr(latest_run, "run_id", None)
                 status_val = getattr(latest_run, "status", None)
                 metrics = list(getattr(latest_run, "metrics_history", []) or [])
-                logs = list(getattr(latest_run, "logs", []) or [])
+                log_entries = (
+                    db.query(LogEntry)
+                    .filter(LogEntry.run_id == latest_run.id)
+                    .order_by(LogEntry.id)
+                    .all()
+                )
                 should_sync_history = status_val in ("running", "queued")
 
                 # If there's an active/running job, ensure the manager polls it
@@ -618,10 +640,19 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str | None):
                         )
 
                     try:
-                        for lg in logs:
+                        for lg in log_entries:
                             try:
+                                time_val = getattr(lg, "time", None) or ""
+                                if not time_val and getattr(lg, "timestamp", None):
+                                    time_val = lg.timestamp.strftime("%H:%M:%S")
                                 log_msg = TelemetryMessage(
-                                    type="log", data=LogMessage(**lg)
+                                    type="log",
+                                    data=LogMessage(
+                                        time=time_val,
+                                        msg=getattr(lg, "msg", None) or "",
+                                        type=getattr(lg, "type", None) or "default",
+                                        epoch=getattr(lg, "epoch", None),
+                                    ),
                                 ).model_dump_json()
                                 await websocket.send_text(log_msg)
                             except (
@@ -636,7 +667,12 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str | None):
                                     exc,
                                 )
                         if run_id:
-                            manager.set_logs_index(run_id, len(logs))
+                            last_log_id = (
+                                int(log_entries[-1].id)
+                                if log_entries and log_entries[-1].id is not None
+                                else 0
+                            )
+                            manager.set_last_log_id(run_id, last_log_id)
                     except (WebSocketDisconnect, OSError, RuntimeError) as exc:
                         logger.exception(
                             "Failed to send persisted logs to websocket client: %s",
