@@ -6,6 +6,14 @@
  * - Development mode (uses localhost:8001)
  */
 
+/**
+ * Cache for dynamically discovered API port
+ */
+let API_PORT: number | null = null;
+
+/**
+ * Cache for constructed base URL
+ */
 let BASE_URL_CACHE: string | null = null;
 
 /**
@@ -51,8 +59,12 @@ export async function getBaseUrl(): Promise<string> {
   }
 
   // Fallback to development URL
-  BASE_URL_CACHE = "http://localhost:8001/api/v1";
-  console.log("Dev mode: Using localhost:8001/api/v1");
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+  BASE_URL_CACHE = envUrl.replace(/\/+$/, "");
+  if (!BASE_URL_CACHE.endsWith("/api/v1")) {
+    BASE_URL_CACHE += "/api/v1";
+  }
+  console.log("Dev mode: Using", BASE_URL_CACHE);
   return BASE_URL_CACHE;
 }
 

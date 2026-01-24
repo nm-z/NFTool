@@ -30,18 +30,9 @@ import {
 import { SummaryCard } from "../common/Cards";
 import { TabTrigger } from "../common/UIComponents";
 import { InferencePlayground } from "./tools/InferencePlayground";
-import { useTrainingStore } from "@/store/useTrainingStore";
+import { useTrainingStore, type MetricPoint } from "@/store/useTrainingStore";
 
 type ArchyNode = { label: string; nodes?: Array<ArchyNode | string> };
-
-type MetricPoint = {
-  trial?: number;
-  epoch?: number;
-  r2?: number;
-  val_loss?: number;
-  mae?: number;
-  [key: string]: unknown;
-};
 
 type TrialPoint = { point: MetricPoint; index: number };
 

@@ -21,11 +21,9 @@ import { Inspector } from "@/components/inspector/Inspector";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
 const waitForBackend = async (apiUrl: string, attempts = 5, delayMs = 1000) => {
-  // health is at root, not under /api/v1
-  const rootUrl = apiUrl.replace(/\/api\/v1\/?$/, "");
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const res = await fetch(`${rootUrl}/health`);
+      const res = await fetch(`${apiUrl}/health`);
       if (res.ok) return true;
     } catch {
       // Swallow network errors; we'll retry below.

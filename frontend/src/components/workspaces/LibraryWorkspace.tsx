@@ -31,7 +31,7 @@ import {
 
 import { TabTrigger } from "../common/UIComponents";
 import { SummaryCard } from "../common/Cards";
-import { useTrainingStore } from "@/store/useTrainingStore";
+import { useTrainingStore, type MetricPoint } from "@/store/useTrainingStore";
 import { DatasetPreview } from "./tools/DatasetPreview";
 import { useApi } from "../ApiProvider";
 
@@ -58,15 +58,6 @@ type AssetNode = {
   children?: AssetNode[];
 };
 
-type MetricPoint = {
-  trial?: number;
-  epoch?: number;
-  loss?: number;
-  r2?: number;
-  mae?: number;
-  val_loss?: number;
-};
-
 type EvalComparison = {
   index: number;
   actual: number;
@@ -75,12 +66,18 @@ type EvalComparison = {
   percent_error: number;
 };
 
-type EvalResult = {
+export type EvalResult = {
   run_id: string;
+  r2: number;
+  mae: number;
+  rmse: number;
+  mse: number;
   accuracy_percent: number;
   mape_percent: number;
   r2_score: number;
   count: number;
+  predictions?: number[];
+  actuals?: number[];
   comparisons: EvalComparison[];
 };
 

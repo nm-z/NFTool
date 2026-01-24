@@ -12,7 +12,7 @@ interface TrainingResult {
   best_params: Record<string, unknown>;
 }
 
-interface MetricPoint {
+export interface MetricPoint {
   trial: number;
   epoch?: number;
   loss: number;

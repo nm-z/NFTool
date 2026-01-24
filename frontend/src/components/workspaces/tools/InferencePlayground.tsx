@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { FastForward, Check, AlertCircle, HardDrive } from "lucide-react";
 import { useTrainingStore } from "@/store/useTrainingStore";
 import { useApi } from "@/components/ApiProvider";
+import type { EvalResult } from "@/components/workspaces/LibraryWorkspace";
 
 export function InferencePlayground({
   loadedPath,
