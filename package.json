@@ -1,0 +1,15 @@
+{
+  "name": "nftool",
+  "version": "0.1.0",
+  "description": "NFTool - Deep Learning Regression Tool",
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "frontend:build": "cd frontend && npm run build",
+    "backend:build": "cd backend && pyinstaller --noconfirm --onedir --console --name nftool-backend --clean run_tauri.py"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.6"
+  }
+}

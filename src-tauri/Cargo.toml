@@ -1,0 +1,20 @@
+[package]
+name = "nftool"
+version = "0.1.0"
+description = "NFTool - Deep Learning Regression Tool"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.8", features = ["shell-sidecar", "shell-open", "window-all", "path-all", "fs-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
