@@ -570,7 +570,7 @@ export function TrainWorkspace() {
                                   entry.epoch != null ? `Epoch ${entry.epoch}` : "Epoch ?";
                                 return `${trialLabel} • ${epochLabel}`;
                               }}
-                              formatter={(value: number, name: string) => {
+                              formatter={(value: number | undefined, name: string | undefined) => {
                                 const precision = name === "loss" || name === "r2" ? 6 : 4;
                                 return [value?.toFixed(precision) ?? "—", name === "loss" ? "Loss" : "R²"];
                               }}
@@ -604,7 +604,6 @@ export function TrainWorkspace() {
                                 stroke="hsl(var(--border-strong))"
                                 strokeDasharray="4 4"
                                 strokeWidth={1}
-                                isFront={false}
                               />
                             ))}
                           </RechartsLineChart>
