@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "export",  // Enable static HTML export for bundling with PyInstaller
   images: {
+    unoptimized: true,  // Required for static export (no image optimization server)
     remotePatterns: [
       {
         protocol: "http",

@@ -4,13 +4,18 @@ This module handles environment variables, path discovery, and directory setup.
 """
 
 import os
+import sys
 from pathlib import Path
 
-# Robust path discovery:
-# REPO_ROOT is the directory containing 'src', 'data', or 'workspace'
-# We look for the parent of the 'src' directory
-CURRENT_FILE = Path(__file__).resolve()
-REPO_ROOT = str(CURRENT_FILE.parent.parent)
+# FREEZE FIX: Detect if we are running as a PyInstaller executable
+if getattr(sys, 'frozen', False):
+    # If frozen, use the folder where the .exe is located
+    # This ensures workspace data persists next to the executable
+    REPO_ROOT = os.path.dirname(sys.executable)
+else:
+    # If running from source, use the parent of the 'src' directory
+    CURRENT_FILE = Path(__file__).resolve()
+    REPO_ROOT = str(CURRENT_FILE.parent.parent)
 
 # Environment Overrides (Docker)
 

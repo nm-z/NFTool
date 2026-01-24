@@ -283,6 +283,23 @@ async def ws_endpoint(websocket: WebSocket):
     await websocket_endpoint(websocket, API_KEY)
 
 
+# MOUNT FRONTEND: Serve Next.js static export from the bundled 'static' folder
+# This must come AFTER all API routes to avoid shadowing /api/* endpoints
+if getattr(sys, 'frozen', False):
+    # In frozen mode (PyInstaller), static files are inside the temp extraction dir
+    static_dir = os.path.join(sys._MEIPASS, "static")
+else:
+    # In dev mode, look for the 'static' folder in the backend directory
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../static")
+
+if os.path.exists(static_dir):
+    # Mount the frontend at root with html=True to enable SPA fallback
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+    logger.info("Frontend served from %s", static_dir)
+else:
+    logger.warning("Frontend static folder not found at %s. Running API-only mode.", static_dir)
+
+
 # Lifespan handler above replaces the deprecated startup event decorator.
 
 

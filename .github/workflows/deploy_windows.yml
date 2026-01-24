@@ -1,0 +1,69 @@
+name: Deploy Windows CUDA App
+
+on:
+  push:
+    branches: [ "local", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-full-stack:
+    runs-on: windows-latest
+
+    steps:
+    # 1. Checkout Code
+    - uses: actions/checkout@v4
+
+    # 2. Build Frontend (Next.js)
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Build Frontend
+      working-directory: ./frontend
+      run: |
+        npm install
+        npm run build
+        # Rename 'out' to 'static' and move it to backend so PyInstaller sees it
+        move out ../backend/static
+
+    # 3. Setup Python & CUDA
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: Install Python Deps (CUDA 12.1)
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        # Force install CUDA-enabled PyTorch
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    # 4. Build Windows EXE
+    - name: Build EXE with PyInstaller
+      working-directory: ./backend
+      run: |
+        # --onedir: Creates a folder (Fastest startup for CUDA apps)
+        # --add-data: Bundles the frontend inside the app
+        pyinstaller --onedir --clean --noconfirm ^
+        --name NFTool_CUDA ^
+        --add-data "static;static" ^
+        --collect-all torch ^
+        --hidden-import=uvicorn.loops.auto ^
+        --hidden-import=uvicorn.protocols.http.auto ^
+        run_windows.py
+
+    # 5. Zip and Upload
+    - name: Zip Release
+      working-directory: ./backend/dist
+      run: powershell Compress-Archive -Path NFTool_CUDA -DestinationPath NFTool_CUDA_Windows.zip
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: NFTool_Windows_Complete
+        path: backend/dist/NFTool_CUDA_Windows.zip
