@@ -34,6 +34,8 @@ async def verify_api_key(
     back to the configured API_KEY value but still reject an explicitly
     provided invalid key.
     """
+    if API_KEY is None:
+        return x_api_key or ""
     if x_api_key is None:
         logger.debug(
             "X-API-Key header missing; using configured API_KEY fallback "

@@ -32,6 +32,7 @@ import {
 import { TabTrigger } from "../common/UIComponents";
 import { SummaryCard } from "../common/Cards";
 import { useTrainingStore } from "@/store/useTrainingStore";
+import { DatasetPreview } from "./tools/DatasetPreview";
 
 const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 const API_BASE = API_ROOT.replace(/\/+$/, "").endsWith("/api/v1")
@@ -87,7 +88,7 @@ type EvalResult = {
 };
 
 export function LibraryWorkspace() {
-  const { runs } = useTrainingStore();
+  const { runs, datasets } = useTrainingStore();
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null);
   const [assetRoots, setAssetRoots] = useState<AssetNode[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -96,6 +97,7 @@ export function LibraryWorkspace() {
   const [targetFiles, setTargetFiles] = useState<FileList | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const initialPreviewPath = datasets?.[0]?.path;
 
   const fetchAssetTree = async () => {
     const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
@@ -424,6 +426,13 @@ export function LibraryWorkspace() {
                     {assetRoots.map((node) => renderNode(node))}
                   </div>
                 )}
+              </div>
+
+              <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-4">
+                <div className="text-[11px] uppercase font-bold tracking-widest text-zinc-500 mb-3">
+                  Dataset Preview
+                </div>
+                <DatasetPreview initialPath={initialPreviewPath} />
               </div>
             </div>
           </Tabs.Content>

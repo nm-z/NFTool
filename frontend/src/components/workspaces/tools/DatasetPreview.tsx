@@ -7,11 +7,12 @@ import {
   Info,
 } from "lucide-react";
 import { SummaryCard } from "../../common/Cards";
+import { useApi } from "@/components/ApiProvider";
 
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "nftool-dev-key";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export function DatasetPreview({ initialPath }: { initialPath?: string }) {
+  const { apiUrl } = useApi();
   type PreviewData = {
     headers: string[];
     rows: Array<Array<string | number | null>>;
@@ -36,7 +37,7 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
       setError(null);
       try {
         const res = await fetch(
-          `${API_URL}/dataset/preview?path=${encodeURIComponent(targetPath)}&rows=20`,
+          `${apiUrl}/data/dataset/preview?path=${encodeURIComponent(targetPath)}&rows=20`,
           {
             headers: { "X-API-Key": API_KEY },
           },
@@ -75,7 +76,7 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
         setLoading(false);
       }
     },
-    [filePath],
+    [apiUrl, filePath],
   );
 
   useEffect(() => {
@@ -91,9 +92,10 @@ export function DatasetPreview({ initialPath }: { initialPath?: string }) {
           value={filePath}
           onChange={(e) => setFilePath(e.target.value)}
           placeholder="Dataset path..."
+          data-testid="input-dataset-path"
           className="flex-1 bg-transparent border-none outline-none text-[11px] text-[hsl(var(--foreground-active))] placeholder-[hsl(var(--foreground-subtle))]"
         />
-      <button
+        <button
           onClick={() => loadPreview()}
           data-testid="btn-preview-dataset"
           disabled={loading}
