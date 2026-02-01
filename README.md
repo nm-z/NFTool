@@ -1,5 +1,7 @@
 # NFTool
 
+![Training Setup Demo](training-setup-demo.gif)
+
 Deep learning tool for modular regression analysis and training.
 
 Quick start:
