@@ -4,7 +4,25 @@
 
 Deep learning tool for modular regression analysis and training.
 
-Quick start:
+## Install on Windows
+
+Open **PowerShell** and run:
+
+```powershell
+irm https://raw.githubusercontent.com/nm-z/NFTool/windows/install.ps1 | iex
+```
+
+This downloads the latest Windows build, installs it (including the Microsoft Edge
+WebView2 runtime), creates a desktop shortcut, and launches NFTool.
+
+> **Note:** the one-liner requires `nm-z/NFTool` and its release assets to be
+> **publicly accessible**. While the repo is private, both `raw.githubusercontent.com`
+> and the release-asset URLs return 404 for anyone not authenticated to the repo,
+> so the command fails for external users. Make the repo (or a dedicated releases
+> repo) public, or distribute the `NFTool_*_x64-setup.exe` installer directly.
+
+## Quick start (development)
+
 `npm run tauri:dev`
 
 Visit: `http://localhost:3000` (frontend) and `http://localhost:8001` (backend)
