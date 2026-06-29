@@ -1,0 +1,104 @@
+[
+  {
+    "name": "MLP",
+    "expects_channel_dim": false,
+    "min_input_dim": 1,
+    "hyperparameters": [
+      {
+        "name": "num_layers",
+        "kind": "int",
+        "low": 1,
+        "high": 100,
+        "log": false,
+        "default": 2,
+        "label": "Number of Layers"
+      },
+      {
+        "name": "layer_size",
+        "kind": "int",
+        "low": 1,
+        "high": 1024,
+        "log": false,
+        "default": 64,
+        "label": "Layer Size"
+      },
+      {
+        "name": "dropout",
+        "kind": "float",
+        "low": 0.0,
+        "high": 0.0,
+        "log": false,
+        "default": 0.0,
+        "label": "Dropout"
+      }
+    ]
+  },
+  {
+    "name": "CNN",
+    "expects_channel_dim": true,
+    "min_input_dim": 16,
+    "hyperparameters": [
+      {
+        "name": "layer_size",
+        "kind": "int",
+        "low": 1,
+        "high": 1024,
+        "log": false,
+        "default": 64,
+        "label": "Conv Width"
+      },
+      {
+        "name": "hidden_dim",
+        "kind": "int",
+        "low": 1,
+        "high": 100,
+        "log": false,
+        "default": 64,
+        "label": "Hidden Dim"
+      },
+      {
+        "name": "dropout",
+        "kind": "float",
+        "low": 0.0,
+        "high": 0.0,
+        "log": false,
+        "default": 0.0,
+        "label": "Dropout"
+      }
+    ]
+  },
+  {
+    "name": "ResNetMLP",
+    "expects_channel_dim": false,
+    "min_input_dim": 1,
+    "hyperparameters": [
+      {
+        "name": "hidden_dim",
+        "kind": "int",
+        "low": 8,
+        "high": 512,
+        "log": false,
+        "default": 64,
+        "label": "Hidden Width"
+      },
+      {
+        "name": "n_blocks",
+        "kind": "int",
+        "low": 1,
+        "high": 8,
+        "log": false,
+        "default": 2,
+        "label": "Residual Blocks"
+      },
+      {
+        "name": "dropout",
+        "kind": "float",
+        "low": 0.0,
+        "high": 0.5,
+        "log": false,
+        "default": 0.0,
+        "label": "Dropout"
+      }
+    ]
+  }
+]
